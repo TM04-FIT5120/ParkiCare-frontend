@@ -1,0 +1,222 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion, useMotionTemplate, useMotionValue } from "motion/react";
+import { User, Lock, ArrowRight, Check } from "lucide-react";
+import { toast } from "sonner";
+import { Footer } from "@/components/layout/Footer";
+
+export function LoginPage() {
+  const navigate = useNavigate();
+  const [userId, setUserId] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Mouse parallax effect for the split screen background
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  function handleMouseMove({ clientX, clientY }: React.MouseEvent) {
+    const { innerWidth, innerHeight } = window;
+    const x = (clientX / innerWidth - 0.5) * 20; // 20px movement
+    const y = (clientY / innerHeight - 0.5) * 20;
+    mouseX.set(x);
+    mouseY.set(y);
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    setIsLoading(true);
+    // Simulate API call
+    setTimeout(() => {
+      setIsLoading(false);
+      navigate("/home");
+      toast.success("Welcome back to ParkiCare!");
+    }, 1500);
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1, delayChildren: 0.2 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 24 } },
+  };
+
+  return (
+    <div className="min-h-screen w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans overflow-hidden relative">
+      <div 
+        className="flex-1 w-full flex relative"
+        onMouseMove={handleMouseMove}
+      >
+        {/* Animated Background Decor behind the transparent form */}
+        <motion.div 
+          animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.6, 0.4] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-10%] right-[-5%] w-[40rem] h-[40rem] rounded-full bg-blue-200/50 blur-[100px] pointer-events-none z-0" 
+        />
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="absolute bottom-[-10%] right-[20%] w-[30rem] h-[30rem] rounded-full bg-indigo-200/50 blur-[100px] pointer-events-none z-0" 
+        />
+
+        {/* Left side Image with Parallax */}
+        <div className="hidden lg:flex w-[55%] relative overflow-hidden bg-slate-900 shadow-2xl z-10 rounded-r-[3rem] items-end justify-start p-16">
+          <motion.img
+            src="https://images.unsplash.com/photo-1693821193140-7db5779d47ed?auto=format&fit=crop&q=80&w=1080"
+            alt="Elderly care"
+            className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
+            style={{
+              x: useMotionTemplate`calc(-5% + ${mouseX}px)`,
+              y: useMotionTemplate`calc(-5% + ${mouseY}px)`,
+              scale: 1.1,
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/40 to-transparent" />
+          
+          <motion.div 
+            className="relative z-20 text-white max-w-xl"
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 1, delay: 0.5 }}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span className="text-xs font-medium tracking-wide">ParkiCare Platform</span>
+            </div>
+            <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
+              Empowering better care for our loved ones.
+            </h1>
+            <p className="text-lg text-slate-300 font-light max-w-md">
+              Log in with your unique User ID to securely manage patient records, track vitals, and coordinate schedules.
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Right side Form (Transparent & Animated) */}
+        <div className="w-full lg:w-[45%] flex items-center justify-center px-8 py-4 sm:px-12 sm:py-6 relative z-20">
+          <div className="w-full max-w-[420px]">
+            <motion.div
+              className="flex justify-center mb-3"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <img src="/logo.png" alt="ParkiCare" className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 object-contain drop-shadow-md" />
+            </motion.div>
+
+            <motion.form 
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              onSubmit={handleSubmit}
+              whileHover={{ y: -4 }}
+              transition={{ type: "spring" as const, stiffness: 400, damping: 30 }}
+              className="space-y-6 bg-white/30 backdrop-blur-2xl p-8 sm:p-10 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.08)] border border-white/60 relative overflow-hidden group"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
+              
+              <motion.div variants={itemVariants} className="relative z-10">
+                <h3 className="text-3xl font-bold mb-2 text-slate-900">Welcome back</h3>
+                <p className="text-slate-600 text-sm font-medium">Please enter your User ID and password to sign in.</p>
+              </motion.div>
+
+              <motion.div variants={itemVariants} className="space-y-4 pt-4 relative z-10">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <User className="w-5 h-5 text-slate-400 focus-within:text-blue-600 transition-colors" />
+                  </div>
+                  <input
+                    type="text"
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
+                    placeholder="User ID (e.g., 100456)"
+                    required
+                  />
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <Lock className="w-5 h-5 text-slate-400 focus-within:text-blue-600 transition-colors" />
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
+                    placeholder="Password"
+                    required
+                  />
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants} className="flex items-center justify-between mt-2 relative z-10">
+                <label className="flex items-center gap-2 cursor-pointer group/check">
+                  <div className="relative flex items-center justify-center w-5 h-5 rounded-[6px] border border-slate-300 bg-white/50 backdrop-blur-sm group-hover/check:border-blue-500 transition-colors">
+                    <input 
+                      type="checkbox" 
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="sr-only" 
+                    />
+                    {rememberMe && (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute inset-0 bg-blue-600 rounded-[5px] flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                      </motion.div>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-slate-700 select-none">Remember ID</span>
+                </label>
+
+                <button type="button" className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4 transition-all">
+                  Forgot password?
+                </button>
+              </motion.div>
+
+              <motion.div variants={itemVariants} className="pt-2 relative z-10">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full relative overflow-hidden group/btn py-3.5 rounded-2xl bg-slate-900 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-800 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500" />
+                  <span className="relative z-10">
+                    {isLoading ? "Signing in..." : "Sign In"}
+                  </span>
+                  {!isLoading && (
+                    <ArrowRight className="w-5 h-5 relative z-10 group-hover/btn:translate-x-1 transition-transform" />
+                  )}
+                </motion.button>
+              </motion.div>
+
+              <motion.p variants={itemVariants} className="text-center text-sm font-medium text-slate-600 mt-8 relative z-10 border-t border-slate-200/50 pt-6">
+                Don't have an account?{" "}
+                <Link to="/register" className="text-blue-600 font-bold hover:text-blue-700 hover:underline underline-offset-4">
+                  Sign up
+                </Link>
+              </motion.p>
+            </motion.form>
+          </div>
+        </div>
+      </div>
+      
+      <div className="w-full relative z-30 shrink-0">
+        <Footer hideDisclaimer />
+      </div>
+    </div>
+  );
+};

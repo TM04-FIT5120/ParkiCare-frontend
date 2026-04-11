@@ -1,0 +1,15 @@
+import { BrowserRouter } from "react-router-dom";
+import { Toaster } from "sonner";
+import { CareEventsProvider } from "@/context/CareEventsProvider";
+import { AppRoutes } from "@/routes/AppRoutes";
+
+export const App = () => (
+  <>
+    <Toaster position="top-center" richColors />
+    <BrowserRouter>
+      <CareEventsProvider>
+        <AppRoutes />
+      </CareEventsProvider>
+    </BrowserRouter>
+  </>
+);
