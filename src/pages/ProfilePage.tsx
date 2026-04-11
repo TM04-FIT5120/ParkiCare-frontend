@@ -95,7 +95,7 @@ export function ProfilePage() {
         <Link to="/" className="flex items-center gap-3 group">
           <motion.img 
             whileHover={{ rotate: 10, scale: 1.1 }}
-            src="/logo.png"
+            src="/logo-nav.png"
             alt="ParkiCare"
             className="w-12 h-12 object-contain drop-shadow-sm" 
           />

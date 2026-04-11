@@ -68,7 +68,7 @@ export function Footer({ hideDisclaimer = false }: { hideDisclaimer?: boolean })
         >
           <span>&copy; {new Date().getFullYear()} ParkiCare</span>
           <span className="w-1 h-1 rounded-full bg-[#A3AED0]/50"></span>
-          <span>The ParkiCare team is Monash FIT5120 Team TM04.</span>
+          <span>Team FutureStack.</span>
         </motion.p>
       </motion.div>
     </footer>

@@ -50,7 +50,7 @@ export function LoadingScreenPage() {
           <img 
             src="/logo.png"
             alt="ParkiCare Logo"
-            className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 object-contain drop-shadow-2xl"
+            className="w-[480px] h-[480px] object-contain drop-shadow-2xl"
           />
         </motion.div>
 

@@ -101,7 +101,7 @@ export const AppLayout = () => {
           <Link to="/home" className="flex items-center gap-2 group shrink-0">
             <motion.img 
               whileHover={{ rotate: 10, scale: 1.05 }}
-              src="/logo.png"
+              src="/logo-nav.png"
               alt="ParkiCare Logo"
               className="w-12 h-12 object-contain drop-shadow-sm" 
             />
