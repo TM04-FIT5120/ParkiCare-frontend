@@ -1,26 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Pill, Clock, Plus, Info, Check, Search, AlertCircle, Trash2, CalendarHeart, Upload, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
-
-const COMMON_MEDS = ["Levodopa", "Madopar", "Entacapone", "Pramipexole", "Ropinirole", "Rasagiline", "Amantadine"];
+import { drugsService, type DrugBase } from "@/services/drugs";
+import { careEventsService } from "@/services/careEvents";
 const CARE_EVENT_TYPES = ["Bathing", "Nursing Care", "Toileting Assist", "Meals", "Exercise", "Physical Therapy"];
 const OUTDOOR_EVENT_TYPES = ["Doctor Appointment", "Walk in Park", "Social Visit", "Shopping", "Recreation", "Family Outing"];
 const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day", "As needed"];
 
 export function CareEventsPage() {
-  const { meds, addMed, deleteMed, events, addEvent, deleteEvent } = useCareEvents();
+  const { meds, addMed, deleteMed, events, addEvent, deleteEvent, patientId } = useCareEvents();
 
   // Medication state
   const [medName, setMedName] = useState("");
+  const [selectedDrug, setSelectedDrug] = useState<DrugBase | null>(null);
   const [dose, setDose] = useState("");
   const [frequency, setFrequency] = useState("2 times/day");
   const [medTimes, setMedTimes] = useState(["", ""]);
   const [showMedsDropdown, setShowMedsDropdown] = useState(false);
+  const [drugSearchResults, setDrugSearchResults] = useState<DrugBase[]>([]);
   const [showFreqDropdown, setShowFreqDropdown] = useState(false);
   const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
-  const [medicationStep, setMedicationStep] = useState(1); // Multi-step form state
+  const [medicationStep, setMedicationStep] = useState(1);
+  const drugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Care Event state
   const [careEventTitle, setCareEventTitle] = useState("");
@@ -35,10 +38,29 @@ export function CareEventsPage() {
   const [showOutdoorTypeDropdown, setShowOutdoorTypeDropdown] = useState(false);
 
   // Separate events into care and outdoor
-  const careEvents = events.filter(ev => CARE_EVENT_TYPES.includes(ev.type));
-  const outdoorEvents = events.filter(ev => OUTDOOR_EVENT_TYPES.includes(ev.type));
+  const careEvents = events.filter(ev => CARE_EVENT_TYPES.includes(ev.type) || ev.eventType === "home");
+  const outdoorEvents = events.filter(ev => OUTDOOR_EVENT_TYPES.includes(ev.type) || ev.eventType === "outdoor");
 
-  const filteredMeds = COMMON_MEDS.filter(m => m.toLowerCase().includes(medName.toLowerCase()));
+  // Debounced live drug search
+  useEffect(() => {
+    if (drugSearchTimer.current) clearTimeout(drugSearchTimer.current);
+    if (!medName.trim()) {
+      setDrugSearchResults([]);
+      return;
+    }
+    drugSearchTimer.current = setTimeout(async () => {
+      try {
+        const results = await drugsService.searchDrugs(medName);
+        setDrugSearchResults(results);
+        setShowMedsDropdown(results.length > 0);
+      } catch {
+        setDrugSearchResults([]);
+      }
+    }, 350);
+    return () => {
+      if (drugSearchTimer.current) clearTimeout(drugSearchTimer.current);
+    };
+  }, [medName]);
 
   // Update time slots when frequency changes
   const handleFrequencyChange = (newFreq: string) => {
@@ -55,7 +77,7 @@ export function CareEventsPage() {
     }
   };
 
-  const handleSaveMedication = (e: React.FormEvent) => {
+  const handleSaveMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!medName || !dose || !frequency) {
       toast.error("Please fill in all medication fields");
@@ -73,18 +95,50 @@ export function CareEventsPage() {
       return;
     }
 
-    // Add medication for each time slot
-    validTimes.forEach(time => {
-      addMed({ name: medName, dose, frequency, time });
-    });
+    const today = new Date().toISOString().slice(0, 10);
+    const adminTimes = validTimes.join(",");
+    const remindTime = validTimes[0];
 
-    toast.success("Medication scheduled successfully!");
+    if (patientId && selectedDrug) {
+      try {
+        const created = await careEventsService.createMedication(
+          patientId,
+          selectedDrug.drugId,
+          dose,
+          frequency,
+          adminTimes,
+          remindTime,
+          today,
+          "",
+        );
+        addMed({
+          remindId: created.remindId,
+          drugId: created.drugId,
+          name: selectedDrug.drugName,
+          dose,
+          frequency,
+          time: remindTime,
+        });
+        toast.success("Medication scheduled successfully!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to save medication");
+        return;
+      }
+    } else {
+      // Fallback: local-only if no patientId or drug not resolved via API
+      validTimes.forEach(time => {
+        addMed({ name: medName, dose, frequency, time });
+      });
+      toast.success("Medication saved locally");
+    }
+
     setMedName("");
+    setSelectedDrug(null);
     setDose("");
     setFrequency("2 times/day");
     setMedTimes(["", ""]);
     setPrescriptionFile(null);
-    setMedicationStep(1); // Reset to first step
+    setMedicationStep(1);
   };
 
   const handleNextStep = () => {
@@ -124,29 +178,93 @@ export function CareEventsPage() {
     setMedicationStep(step);
   };
 
-  const handleSaveCareEvent = (e: React.FormEvent) => {
+  const handleSaveCareEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!careEventTitle || !careEventType || !careEventTime) {
       toast.error("Please fill in all care event fields");
       return;
     }
 
-    addEvent({ title: careEventTitle, type: careEventType, time: careEventTime });
-    toast.success("Care event scheduled successfully!");
+    const today = new Date().toISOString().slice(0, 10);
+    const startDatetime = `${today}T${careEventTime}:00`;
+    const endDt = new Date(`${today}T${careEventTime}:00`);
+    endDt.setHours(endDt.getHours() + 1);
+    const endDatetimeFinal = endDt.toISOString().slice(0, 19);
+
+    if (patientId) {
+      try {
+        const created = await careEventsService.createHomeCare(
+          patientId,
+          careEventTitle,
+          startDatetime,
+          endDatetimeFinal,
+          "",
+        );
+        addEvent({
+          backendId: created.id,
+          eventType: "home",
+          title: created.homeCareTitle,
+          type: careEventType,
+          time: careEventTime,
+          startDatetime: created.startDatetime,
+          endDatetime: created.endDatetime,
+        });
+        toast.success("Care event scheduled successfully!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to save care event");
+        return;
+      }
+    } else {
+      addEvent({ title: careEventTitle, type: careEventType, time: careEventTime });
+      toast.success("Care event saved locally");
+    }
+
     setCareEventTitle("");
     setCareEventTime("");
     setCareEventType("Bathing");
   };
 
-  const handleSaveOutdoorEvent = (e: React.FormEvent) => {
+  const handleSaveOutdoorEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!outdoorEventTitle || !outdoorEventType || !outdoorEventTime) {
       toast.error("Please fill in all outdoor event fields");
       return;
     }
 
-    addEvent({ title: outdoorEventTitle, type: outdoorEventType, time: outdoorEventTime });
-    toast.success("Outdoor event scheduled successfully!");
+    const today = new Date().toISOString().slice(0, 10);
+    const startDatetime = `${today}T${outdoorEventTime}:00`;
+    const endDt = new Date(`${today}T${outdoorEventTime}:00`);
+    endDt.setHours(endDt.getHours() + 1);
+    const endDatetime = endDt.toISOString().slice(0, 19);
+
+    if (patientId) {
+      try {
+        const created = await careEventsService.createOutdoor(
+          patientId,
+          outdoorEventTitle,
+          startDatetime,
+          endDatetime,
+          "",
+        );
+        addEvent({
+          backendId: created.id,
+          eventType: "outdoor",
+          title: created.outdoorTitle,
+          type: outdoorEventType,
+          time: outdoorEventTime,
+          startDatetime: created.startDatetime,
+          endDatetime: created.endDatetime,
+        });
+        toast.success("Outdoor event scheduled successfully!");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to save outdoor event");
+        return;
+      }
+    } else {
+      addEvent({ title: outdoorEventTitle, type: outdoorEventType, time: outdoorEventTime });
+      toast.success("Outdoor event saved locally");
+    }
+
     setOutdoorEventTitle("");
     setOutdoorEventTime("");
     setOutdoorEventType("Doctor Appointment");
@@ -220,11 +338,7 @@ export function CareEventsPage() {
                           value={medName}
                           onChange={(e) => {
                             setMedName(e.target.value);
-                            if (e.target.value.length > 0) {
-                              setShowMedsDropdown(true);
-                            } else {
-                              setShowMedsDropdown(false);
-                            }
+                            setSelectedDrug(null);
                           }}
                           onBlur={() => setTimeout(() => setShowMedsDropdown(false), 200)}
                           placeholder="e.g., Levodopa"
@@ -235,28 +349,38 @@ export function CareEventsPage() {
                       <div className="mt-2 flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl border-none">
                         <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
                         <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
-                          Tip: Common Parkinson's medications include Levodopa, Madopar, and Entacapone.
+                          {selectedDrug
+                            ? `Selected: ${selectedDrug.drugName} — suggested dose: ${selectedDrug.dosage}`
+                            : "Tip: Type to search medications from the database."}
                         </p>
                       </div>
 
                       <AnimatePresence>
-                        {showMedsDropdown && filteredMeds.length > 0 && (
-                          <motion.div 
+                        {showMedsDropdown && drugSearchResults.length > 0 && (
+                          <motion.div
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
                             className="absolute top-[75px] left-0 right-0 bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 max-h-48 overflow-y-auto z-50"
                           >
-                            {filteredMeds.map(med => (
-                              <div 
-                                key={med}
+                            {drugSearchResults.map(drug => (
+                              <div
+                                key={drug.drugId}
                                 onClick={() => {
-                                  setMedName(med);
+                                  setSelectedDrug(drug);
+                                  setMedName(drug.drugName);
+                                  if (!dose) setDose(drug.dosage);
+                                  if (frequency === "2 times/day" && drug.frequency) {
+                                    setFrequency(drug.frequency);
+                                    const count = parseInt(drug.frequency.match(/\d+/)?.[0] || "2");
+                                    setMedTimes(Array(count).fill(""));
+                                  }
                                   setShowMedsDropdown(false);
                                 }}
                                 className="px-4 py-3 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700 flex items-center justify-between group"
                               >
-                                {med}
+                                <span>{drug.drugName}</span>
+                                <span className="text-xs text-[#A3AED0]">{drug.dosage}</span>
                                 <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                               </div>
                             ))}
@@ -783,9 +907,16 @@ export function CareEventsPage() {
                         <Clock className="w-4 h-4 text-[#4318FF]" />
                         {med.time}
                       </div>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => deleteMed(med.id)}
+                        onClick={async () => {
+                          if (med.remindId) {
+                            try {
+                              await careEventsService.confirmMedication(med.remindId);
+                            } catch { /* ignore, still remove locally */ }
+                          }
+                          deleteMed(med.id);
+                        }}
                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -834,9 +965,14 @@ export function CareEventsPage() {
                         <Clock className="w-4 h-4 text-[#A3AED0]" />
                         {ev.time}
                       </div>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => deleteEvent(ev.id)}
+                        onClick={async () => {
+                          if (ev.backendId && ev.eventType === "home") {
+                            try { await careEventsService.deleteHomeCare(ev.backendId); } catch { /* ignore */ }
+                          }
+                          deleteEvent(ev.id);
+                        }}
                         className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -885,9 +1021,14 @@ export function CareEventsPage() {
                         <Clock className="w-4 h-4 text-[#A3AED0]" />
                         {ev.time}
                       </div>
-                      <button 
+                      <button
                         type="button"
-                        onClick={() => deleteEvent(ev.id)}
+                        onClick={async () => {
+                          if (ev.backendId && ev.eventType === "outdoor") {
+                            try { await careEventsService.deleteOutdoor(ev.backendId); } catch { /* ignore */ }
+                          }
+                          deleteEvent(ev.id);
+                        }}
                         className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
                       >
                         <Trash2 className="w-4 h-4" />

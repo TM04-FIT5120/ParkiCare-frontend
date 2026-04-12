@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
 import { User, Globe, ChevronDown, Check, Menu, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -22,31 +23,13 @@ const LANGUAGES = [
 
 export const AppLayout = () => {
   const location = useLocation();
+  const { user, patient } = useAuth();
   const [currentLang, setCurrentLang] = useState(LANGUAGES[0]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
-  const [caregiverId, setCaregiverId] = useState(location.state?.caregiverId || localStorage.getItem("parkicare_caregiver_id") || "948271");
-  const [caregiverNickname, setCaregiverNickname] = useState(location.state?.nickname || localStorage.getItem("parkicare_caregiver_nickname") || "Caregiver");
-  const [patientNickname, setPatientNickname] = useState(localStorage.getItem("parkicare_patient_nickname") || "Patient");
 
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setCaregiverId(localStorage.getItem("parkicare_caregiver_id") || "948271");
-      setCaregiverNickname(localStorage.getItem("parkicare_caregiver_nickname") || "Caregiver");
-      setPatientNickname(localStorage.getItem("parkicare_patient_nickname") || "Patient");
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('parkicare_user_update', handleStorageChange);
-    
-    // Initial load
-    handleStorageChange();
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('parkicare_user_update', handleStorageChange);
-    };
-  }, []);
+  const caregiverId = user?.caregiverId ?? "—";
+  const caregiverNickname = user?.caregiverNickname ?? "Caregiver";
+  const patientNickname = patient?.patientNickname ?? "Patient";
 
   const navLinks = [
     { name: "Home", path: "/home" },

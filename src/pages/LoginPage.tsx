@@ -1,16 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
-import { User, Lock, ArrowRight, Check } from "lucide-react";
+import { User, Lock, ArrowRight, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Footer } from "@/components/layout/Footer";
+import { authService } from "@/services/auth";
+import { patientService } from "@/services/patient";
+import { useAuth } from "@/context/AuthContext";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState("");
+  const { login, setPatient } = useAuth();
+  const [userId, setUserId] = useState(() => localStorage.getItem("parkicare_remembered_id") ?? "");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem("parkicare_remembered_id"));
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (rememberMe) {
+      localStorage.setItem("parkicare_remembered_id", userId);
+    } else {
+      localStorage.removeItem("parkicare_remembered_id");
+    }
+  }, [rememberMe, userId]);
 
   // Mouse parallax effect for the split screen background
   const mouseX = useMotionValue(0);
@@ -24,20 +37,47 @@ export function LoginPage() {
     mouseY.set(y);
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
     if (!userId || !password) {
-      toast.error("Please fill in all fields");
+      setError("Please fill in all fields.");
       return;
     }
-    
+
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const data = await authService.login(userId, password);
+      login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname });
+
+      const patients = await patientService.getPatientsByCaregiver(data.caregiverId);
+      if (patients.length > 0) {
+        const p = patients[0];
+        setPatient({ patientId: p.id, patientNickname: p.patientNickname, patientAge: p.ageRange });
+        toast.success("Welcome back to ParkiCare!");
+        navigate("/home");
+      } else {
+        toast.success("Welcome! Let's set up your patient profile.");
+        navigate("/patient-setup");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      const isCredentialError =
+        message.includes("400") ||
+        message.includes("401") ||
+        message.toLowerCase().includes("invalid") ||
+        message.toLowerCase().includes("incorrect") ||
+        message.toLowerCase().includes("not found") ||
+        message.toLowerCase().includes("unauthorized") ||
+        message.toLowerCase().includes("wrong");
+      setError(
+        isCredentialError
+          ? "Incorrect User ID or password. Please try again."
+          : "Something went wrong. Please try again later."
+      );
+    } finally {
       setIsLoading(false);
-      navigate("/home");
-      toast.success("Welcome back to ParkiCare!");
-    }, 1500);
+    }
   };
 
   const containerVariants = {
@@ -135,13 +175,13 @@ export function LoginPage() {
               <motion.div variants={itemVariants} className="space-y-4 pt-4 relative z-10">
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                    <User className="w-5 h-5 text-slate-400 focus-within:text-blue-600 transition-colors" />
+                    <User className={`w-5 h-5 transition-colors ${error ? "text-red-400" : "text-slate-400"}`} />
                   </div>
                   <input
                     type="text"
                     value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
+                    onChange={(e) => { setUserId(e.target.value); setError(null); }}
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border rounded-2xl text-slate-900 outline-none transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] ${error ? "border-red-400 focus:ring-4 focus:ring-red-500/10 focus:border-red-500" : "border-white/60 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500"}`}
                     placeholder="User ID (e.g., 100456)"
                     required
                   />
@@ -149,17 +189,28 @@ export function LoginPage() {
 
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                    <Lock className="w-5 h-5 text-slate-400 focus-within:text-blue-600 transition-colors" />
+                    <Lock className={`w-5 h-5 transition-colors ${error ? "text-red-400" : "text-slate-400"}`} />
                   </div>
                   <input
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
+                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border rounded-2xl text-slate-900 outline-none transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] ${error ? "border-red-400 focus:ring-4 focus:ring-red-500/10 focus:border-red-500" : "border-white/60 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500"}`}
                     placeholder="Password"
                     required
                   />
                 </div>
+
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600"
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span className="text-sm font-medium">{error}</span>
+                  </motion.div>
+                )}
               </motion.div>
 
               <motion.div variants={itemVariants} className="flex items-center justify-between mt-2 relative z-10">

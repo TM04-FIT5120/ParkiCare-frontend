@@ -4,9 +4,12 @@ import { motion, useMotionTemplate, useMotionValue } from "motion/react";
 import { User, Lock, ArrowRight, ShieldCheck, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Footer } from "@/components/layout/Footer";
+import { authService } from "@/services/auth";
+import { useAuth } from "@/context/AuthContext";
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     nickname: "",
     password: "",
@@ -30,7 +33,7 @@ export function RegisterPage() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nickname || !formData.password || !formData.confirmPassword) {
       toast.error("Please fill in all fields");
@@ -40,21 +43,22 @@ export function RegisterPage() {
       toast.error("Passwords do not match");
       return;
     }
-    
+    if (!/^[a-zA-Z0-9]{6,20}$/.test(formData.nickname)) {
+      toast.error("Nickname must be 6–20 alphanumeric characters");
+      return;
+    }
+
     setIsLoading(true);
-    // Simulate API call and generate unique ID
-    setTimeout(() => {
-      setIsLoading(false);
-      const generatedId = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Save caregiver nickname to localStorage
-      localStorage.setItem("parkicare_caregiver_nickname", formData.nickname);
-      window.dispatchEvent(new Event('parkicare_user_update'));
-      
+    try {
+      const data = await authService.register(formData.nickname, formData.password);
+      login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname });
       toast.success("Account created successfully!");
-      // Redirect to patient setup, passing the generated ID
-      navigate("/patient-setup", { state: { caregiverId: generatedId } });
-    }, 1500);
+      navigate("/patient-setup", { state: { caregiverId: data.caregiverId } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {

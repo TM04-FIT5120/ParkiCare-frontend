@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { motion } from "motion/react";
 import { User, Copy, CheckCircle2, ArrowRight, HeartPulse, LogOut } from "lucide-react";
 import { toast } from "sonner";
@@ -8,13 +9,11 @@ import { Footer } from "@/components/layout/Footer";
 export function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  
-  // Get data from state, then fallback to localStorage, then default
-  const { 
-    caregiverId = localStorage.getItem("parkicare_caregiver_id") || "948271", 
-    patientNickname = localStorage.getItem("parkicare_patient_nickname") || "Dear Parent", 
-    ageRange = localStorage.getItem("parkicare_patient_age") || "70-79" 
-  } = location.state || {};
+  const { user, patient } = useAuth();
+
+  const caregiverId = user?.caregiverId ?? location.state?.caregiverId ?? "—";
+  const patientNickname = patient?.patientNickname ?? location.state?.patientNickname ?? "—";
+  const ageRange = patient?.patientAge ?? location.state?.ageRange ?? "—";
 
   const [copied, setCopied] = useState(false);
 

@@ -6,50 +6,76 @@ import {
   type CareEvent,
   type Medication,
 } from "@/context/careEventsContext";
+import { careEventsService } from "@/services/careEvents";
+import { useAuth } from "@/context/AuthContext";
 
 export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
-  const [meds, setMeds] = useState<Medication[]>(() => {
-    const saved = localStorage.getItem("parkicare_meds");
-    return saved ? (JSON.parse(saved) as Medication[]) : DEFAULT_MEDS;
-  });
+  const { patient } = useAuth();
+  const patientId = patient?.patientId ?? null;
 
-  const [events, setEvents] = useState<CareEvent[]>(() => {
-    const saved = localStorage.getItem("parkicare_events");
-    return saved ? (JSON.parse(saved) as CareEvent[]) : DEFAULT_EVENTS;
-  });
+  const [loading, setLoading] = useState(false);
+  const [meds, setMeds] = useState<Medication[]>(DEFAULT_MEDS);
+  const [events, setEvents] = useState<CareEvent[]>(DEFAULT_EVENTS);
 
-  useEffect(() => {
-    const stringified = JSON.stringify(meds);
-    if (localStorage.getItem("parkicare_meds") !== stringified) {
-      localStorage.setItem("parkicare_meds", stringified);
-      window.dispatchEvent(new Event("parkicare_update"));
+  const fetchFromApi = useCallback(async (pid: number) => {
+    setLoading(true);
+    try {
+      const [apiMeds, apiHomeCare, apiOutdoor] = await Promise.all([
+        careEventsService.getMedications(pid),
+        careEventsService.getHomeCare(pid),
+        careEventsService.getOutdoor(pid),
+      ]);
+
+      const mappedMeds: Medication[] = apiMeds.map((m) => ({
+        id: m.remindId,
+        remindId: m.remindId,
+        drugId: m.drugId,
+        name: `Drug #${m.drugId}`,
+        dose: m.dosage,
+        frequency: m.frequency,
+        time: m.remindTime,
+        startDate: m.startDate,
+      }));
+
+      const mappedHome: CareEvent[] = apiHomeCare.map((h) => ({
+        id: h.id,
+        backendId: h.id,
+        eventType: "home" as const,
+        title: h.homeCareTitle,
+        type: "Home Care",
+        time: h.startDatetime.slice(11, 16),
+        startDatetime: h.startDatetime,
+        endDatetime: h.endDatetime,
+      }));
+
+      const mappedOutdoor: CareEvent[] = apiOutdoor.map((o) => ({
+        id: o.id + 100000,
+        backendId: o.id,
+        eventType: "outdoor" as const,
+        title: o.outdoorTitle,
+        type: "Outdoor",
+        time: o.startDatetime.slice(11, 16),
+        startDatetime: o.startDatetime,
+        endDatetime: o.endDatetime,
+      }));
+
+      setMeds(mappedMeds);
+      setEvents([...mappedHome, ...mappedOutdoor]);
+    } catch {
+      // Backend unreachable — keep current state
+    } finally {
+      setLoading(false);
     }
-  }, [meds]);
-
-  useEffect(() => {
-    const stringified = JSON.stringify(events);
-    if (localStorage.getItem("parkicare_events") !== stringified) {
-      localStorage.setItem("parkicare_events", stringified);
-      window.dispatchEvent(new Event("parkicare_update"));
-    }
-  }, [events]);
-
-  useEffect(() => {
-    const handleUpdate = () => {
-      const savedMeds = localStorage.getItem("parkicare_meds");
-      if (savedMeds) {
-        setMeds((prev) => (JSON.stringify(prev) === savedMeds ? prev : JSON.parse(savedMeds)));
-      }
-      const savedEvents = localStorage.getItem("parkicare_events");
-      if (savedEvents) {
-        setEvents((prev) =>
-          JSON.stringify(prev) === savedEvents ? prev : JSON.parse(savedEvents),
-        );
-      }
-    };
-    window.addEventListener("parkicare_update", handleUpdate);
-    return () => window.removeEventListener("parkicare_update", handleUpdate);
   }, []);
+
+  useEffect(() => {
+    if (patientId) {
+      fetchFromApi(patientId);
+    } else {
+      setMeds(DEFAULT_MEDS);
+      setEvents(DEFAULT_EVENTS);
+    }
+  }, [patientId, fetchFromApi]);
 
   const addMed = useCallback((med: Omit<Medication, "id">) => {
     setMeds((prev) => [...prev, { ...med, id: Date.now() }]);
@@ -67,16 +93,23 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
+  const refresh = useCallback(() => {
+    if (patientId) fetchFromApi(patientId);
+  }, [patientId, fetchFromApi]);
+
   const value = useMemo(
     () => ({
+      patientId,
+      loading,
       meds,
       addMed,
       deleteMed,
       events,
       addEvent,
       deleteEvent,
+      refresh,
     }),
-    [meds, events, addMed, deleteMed, addEvent, deleteEvent],
+    [patientId, loading, meds, events, addMed, deleteMed, addEvent, deleteEvent, refresh],
   );
 
   return (

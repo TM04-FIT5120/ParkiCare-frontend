@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { Download, FileSpreadsheet, List, AlignLeft, CheckCircle2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { careEventsService, type MedicationPlan, type HomeCareScheduleResponse, type OutdoorScheduleResponse } from "@/services/careEvents";
+import { useAuth } from "@/context/AuthContext";
 
 export function DigitalRecordsPage() {
+  const { patient } = useAuth();
   const [activeTab1, setActiveTab1] = useState<"detailed" | "summary" | "narrative">("detailed");
   const [activeTab2, setActiveTab2] = useState<"detailed" | "summary" | "narrative">("detailed");
   const [activeTab3, setActiveTab3] = useState<"detailed" | "summary" | "narrative">("detailed");
@@ -32,27 +35,17 @@ export function DigitalRecordsPage() {
     "Full History"
   ];
 
-  const medicationRecords = [
-    { id: 1, date: "24/03/2026", time: "08:15", drug: "Levodopa", status: "Taken", delay: "+15m" },
-    { id: 2, date: "24/03/2026", time: "14:00", drug: "Levodopa", status: "Missed", delay: "N/A" },
-    { id: 3, date: "24/03/2026", time: "20:45", drug: "Levodopa", status: "Taken", delay: "+45m" },
-    { id: 4, date: "25/03/2026", time: "08:00", drug: "Levodopa", status: "Taken", delay: "On Time" },
-    { id: 5, date: "25/03/2026", time: "14:10", drug: "Levodopa", status: "Taken", delay: "+10m" },
-    { id: 6, date: "26/03/2026", time: "08:00", drug: "Levodopa", status: "Taken", delay: "On Time" },
-  ];
+  const [medicationRecords, setMedicationRecords] = useState<MedicationPlan[]>([]);
+  const [careEventRecords, setCareEventRecords] = useState<HomeCareScheduleResponse[]>([]);
+  const [outdoorRecords, setOutdoorRecords] = useState<OutdoorScheduleResponse[]>([]);
 
-  const careEventRecords = [
-    { id: 1, date: "24/03/2026", time: "09:30", activity: "Morning Walk", duration: "25 min", notes: "Good pace" },
-    { id: 2, date: "24/03/2026", time: "15:00", activity: "Physical Therapy", duration: "45 min", notes: "Complete" },
-    { id: 3, date: "25/03/2026", time: "10:00", activity: "Morning Walk", duration: "30 min", notes: "Excellent" },
-    { id: 4, date: "25/03/2026", time: "16:30", activity: "Light Exercise", duration: "20 min", notes: "Stretching" },
-    { id: 5, date: "26/03/2026", time: "09:00", activity: "Morning Walk", duration: "20 min", notes: "Shortened" },
-  ];
-
-  const outdoorRecords = [
-    { id: 1, date: "24/03/2026", time: "11:00", event: "Doctor Visit", location: "Medical Center", status: "Completed" },
-    { id: 2, date: "25/03/2026", time: "14:00", event: "Park Outing", location: "Central Park", status: "Completed" },
-  ];
+  useEffect(() => {
+    const patientId = patient?.patientId;
+    if (!patientId) return;
+    careEventsService.getMedications(patientId).then(setMedicationRecords).catch(() => {});
+    careEventsService.getHomeCare(patientId).then(setCareEventRecords).catch(() => {});
+    careEventsService.getOutdoor(patientId).then(setOutdoorRecords).catch(() => {});
+  }, [patient?.patientId]);
 
   const handleExport = (tableType: string) => {
     toast.success(`Generating ${tableType} Report...`);
@@ -204,25 +197,21 @@ export function DigitalRecordsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E0E5F2]">
-                    {medicationRecords.map((rec, index) => (
-                      <tr key={`med-${rec.id || index}`} className="hover:bg-[#F4F7FE]/50 transition-colors">
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.date}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.time}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.drug}</td>
+                    {medicationRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-sm font-bold text-[#A3AED0]">No medication records found.</td>
+                      </tr>
+                    ) : medicationRecords.map((rec, index) => (
+                      <tr key={`med-${rec.remindId || index}`} className="hover:bg-[#F4F7FE]/50 transition-colors">
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.startDate}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.remindTime}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">Drug #{rec.drugId}</td>
                         <td className="p-3 sm:p-4">
-                          <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                            rec.status === 'Taken' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                          }`}>
-                            {rec.status}
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-600">
+                            Scheduled
                           </span>
                         </td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">
-                          {rec.delay.includes('+') ? (
-                            <span className="text-orange-500 font-bold">{rec.delay}</span>
-                          ) : (
-                            rec.delay
-                          )}
-                        </td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.dosage}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -400,13 +389,17 @@ export function DigitalRecordsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E0E5F2]">
-                    {careEventRecords.map((rec, index) => (
+                    {careEventRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-sm font-bold text-[#A3AED0]">No care event records found.</td>
+                      </tr>
+                    ) : careEventRecords.map((rec, index) => (
                       <tr key={`care-${rec.id || index}`} className="hover:bg-[#F4F7FE]/50 transition-colors">
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.date}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.time}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.activity}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.duration}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.notes}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.startDatetime.slice(0, 10)}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.startDatetime.slice(11, 16)}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.homeCareTitle}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">—</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.careNote || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -584,17 +577,19 @@ export function DigitalRecordsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E0E5F2]">
-                    {outdoorRecords.map((rec, index) => (
+                    {outdoorRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-sm font-bold text-[#A3AED0]">No outdoor activity records found.</td>
+                      </tr>
+                    ) : outdoorRecords.map((rec, index) => (
                       <tr key={`outdoor-${rec.id || index}`} className="hover:bg-[#F4F7FE]/50 transition-colors">
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.date}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.time}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.event}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.location}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.startDatetime.slice(0, 10)}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.startDatetime.slice(11, 16)}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.outdoorTitle}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.prepareNote || "—"}</td>
                         <td className="p-3 sm:p-4">
-                          <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                            rec.status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'
-                          }`}>
-                            {rec.status}
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-600">
+                            Scheduled
                           </span>
                         </td>
                       </tr>

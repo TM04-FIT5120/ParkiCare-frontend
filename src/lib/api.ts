@@ -1,0 +1,20 @@
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "http://localhost:8080/api",
+  headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const data = error.response?.data;
+    const message =
+      (typeof data === "string" ? data : data?.message) ||
+      error.message ||
+      "An unexpected error occurred";
+    return Promise.reject(new Error(String(message)));
+  },
+);
+
+export default api;

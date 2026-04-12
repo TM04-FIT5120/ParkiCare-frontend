@@ -1,15 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Calendar as CalendarIcon, 
-  Clock, 
-  Pill, 
-  Plus, 
-  CheckCircle2, 
+import {
+  Calendar as CalendarIcon,
+  Clock,
+  Pill,
+  Plus,
+  CheckCircle2,
   Circle,
-  ChevronLeft,
-  ChevronRight,
   Activity,
   Heart,
   Stethoscope,
@@ -18,79 +16,96 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
+import { caregiverScheduleService } from "@/services/caregiverSchedule";
+import { dashboardService, type TaskResponse } from "@/services/dashboard";
+import { useAuth } from "@/context/AuthContext";
+import { CalendarWidget } from "@/components/CalendarWidget";
 
 export function DashboardPage() {
   const { meds: patientMedications, events: patientEventsStore } = useCareEvents();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const caregiverId = user?.caregiverId ?? 0;
 
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventStartTime, setNewEventStartTime] = useState("");
   const [newEventEndTime, setNewEventEndTime] = useState("");
-  const [selectedDate, setSelectedDate] = useState(1); // Currently selected date
   const [confirmTaskId, setConfirmTaskId] = useState<number | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [overdueCount, setOverdueCount] = useState(0);
+  const [upcomingTasks, setUpcomingTasks] = useState<TaskResponse[]>([]);
 
-  const [agenda, setAgenda] = useState([
-    { id: 1, title: "Prepare Breakfast", time: "08:00", completed: true },
-    { id: 2, title: "Administer Morning Meds", time: "08:30", completed: true },
-    { id: 3, title: "Grocery Shopping", time: "11:00", completed: false },
-  ]);
+  const [agenda, setAgenda] = useState<{
+    id: number;
+    title: string;
+    time: string;
+    startDatetime: string;
+    endDatetime: string;
+    completed: boolean;
+  }[]>([]);
 
-  const patientPlans = [
-    { id: 1, title: "Doctor Appointment", time: "10:30", icon: Stethoscope },
-    { id: 2, title: "Family Video Call", time: "19:00", icon: Video },
-  ];
+  // Fetch caregiver schedules + dashboard summary from API on mount
+  useEffect(() => {
+    if (!caregiverId) return;
 
-  // Generate week days for calendar
-  const generateWeekDays = () => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dates = [29, 30, 31, 1, 2, 3, 4];
-    return dates.map((date, idx) => ({
-      day: days[idx],
-      date,
-      isToday: date === 1,
-      isPastMonth: date > 20
-    }));
-  };
+    caregiverScheduleService.getSchedules(caregiverId).then((schedules) => {
+      setAgenda(
+        schedules.map((s) => ({
+          id: s.id,
+          title: s.scheduleTitle,
+          time: s.startDatetime.slice(11, 16),
+          startDatetime: s.startDatetime,
+          endDatetime: s.endDatetime,
+          completed: false,
+        })),
+      );
+    }).catch(() => {});
 
-  const weekDays = generateWeekDays();
+    dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
+    dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
+    dashboardService.getUpcomingTasks(caregiverId).then(setUpcomingTasks).catch(() => {});
+  }, [caregiverId]);
 
-  // Time slots for calendar view
-  const timeSlots = Array.from({ length: 24 }, (_, i) => {
-    const hour = i.toString().padStart(2, '0');
-    return `${hour}:00`;
-  });
+  const patientPlans = upcomingTasks.slice(0, 2).map((t) => ({
+    id: t.id,
+    title: t.title,
+    time: t.time,
+    icon: t.type === "medication" ? Pill : t.type === "outdoor" ? Stethoscope : Video,
+  }));
 
-  // Calendar events - combining all events for the timeline view
-  const calendarEvents = [
-    { id: 1, title: "Morning Medication", start: "08:00", end: "08:30", color: "bg-purple-200 border-purple-400" },
-    { id: 2, title: "Doctor Appointment", start: "10:00", end: "11:00", color: "bg-blue-200 border-blue-400" },
-    { id: 3, title: "Physical Therapy", start: "14:00", end: "15:30", color: "bg-green-200 border-green-400" },
-    { id: 4, title: "Evening Medication", start: "18:00", end: "18:30", color: "bg-purple-200 border-purple-400" },
-  ];
-
-  const getCurrentTime = () => {
-    const now = new Date();
-    return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-  };
-
-  const currentTime = getCurrentTime();
-
-  const handleAddEvent = (e: React.FormEvent) => {
+  const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEventTitle || !newEventStartTime || !newEventEndTime) return;
 
-    const updatedAgenda = [...agenda, { 
-      id: Date.now(), 
-      title: newEventTitle, 
-      time: newEventStartTime, 
-      completed: false 
-    }].sort((a, b) => a.time.localeCompare(b.time));
-      
-    setAgenda(updatedAgenda);
+    const today = new Date().toISOString().slice(0, 10);
+    const startDatetime = `${today}T${newEventStartTime}:00`;
+    const endDatetime = `${today}T${newEventEndTime}:00`;
+
+    try {
+      const created = await caregiverScheduleService.createSchedule(
+        caregiverId,
+        newEventTitle,
+        startDatetime,
+        endDatetime,
+        "",
+      );
+      setAgenda((prev) =>
+        [...prev, { id: created.id, title: created.scheduleTitle, time: newEventStartTime, startDatetime, endDatetime, completed: false }]
+          .sort((a, b) => a.time.localeCompare(b.time)),
+      );
+      toast.success("Event added successfully");
+    } catch {
+      // Fallback: add locally if API is unavailable
+      setAgenda((prev) =>
+        [...prev, { id: Date.now(), title: newEventTitle, time: newEventStartTime, startDatetime, endDatetime, completed: false }]
+          .sort((a, b) => a.time.localeCompare(b.time)),
+      );
+      toast.success("Event added locally");
+    }
+
     setNewEventTitle("");
     setNewEventStartTime("");
     setNewEventEndTime("");
-    toast.success("Event added successfully");
   };
 
   const handleTaskClick = (id: number, completed: boolean) => {
@@ -117,114 +132,19 @@ export function DashboardPage() {
     setAgenda(agenda.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
   };
 
-  // Combine calendar events with agenda for Caregiver Schedule
-  const caregiverSchedule = [
-    ...agenda,
-    ...calendarEvents.map(event => ({
-      id: 1000 + event.id,
-      title: event.title,
-      time: event.start,
-      completed: false
-    }))
-  ].sort((a, b) => a.time.localeCompare(b.time));
+  // Caregiver Schedule: use API-backed agenda (already sorted)
+  const caregiverSchedule = agenda;
 
   return (
     <>
       {/* Full Width Calendar at Top */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.15 }}
         className="mb-8"
       >
-        <div className="bg-white rounded-[20px] shadow-[0_18px_40px_rgba(112,144,176,0.12)] overflow-hidden">
-          
-          {/* Calendar Header with Days */}
-          <div className="border-b border-gray-100">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <button type="button" className="p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                <ChevronLeft className="w-5 h-5 text-[#2B3674]" />
-              </button>
-              <h3 className="text-sm font-bold text-[#2B3674]">April 2026</h3>
-              <button type="button" className="p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                <ChevronRight className="w-5 h-5 text-[#2B3674]" />
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-7 border-b border-gray-100">
-              {weekDays.map((day, idx) => (
-                <button
-                  key={`day-${idx}`}
-                  type="button"
-                  onClick={() => setSelectedDate(day.date)}
-                  className={`flex flex-col items-center py-3 transition-colors relative ${
-                    day.isToday 
-                      ? 'bg-red-500 text-white' 
-                      : selectedDate === day.date
-                      ? 'bg-blue-50'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <span className={`text-xs font-bold mb-1 ${day.isToday ? 'text-white' : 'text-[#A3AED0]'}`}>
-                    {day.day}
-                  </span>
-                  <span className={`text-xl font-bold ${day.isToday ? 'text-white' : day.isPastMonth ? 'text-gray-300' : 'text-[#2B3674]'}`}>
-                    {day.date}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Calendar Timeline */}
-          <div className="relative h-[220px] sm:h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-transparent hover:scrollbar-thumb-[#4318FF]/30 scrollbar-track-transparent">
-            <div className="relative">
-              {/* Time slots */}
-              {timeSlots.map((time) => (
-                <div key={`slot-${time}`} className="flex border-b border-gray-50 relative" style={{ height: '40px' }}>
-                  <div className="w-16 shrink-0 text-xs font-bold text-[#A3AED0] text-right pr-3 pt-1">
-                    {time}
-                  </div>
-                  <div className="flex-1 relative">
-                    {/* Current time indicator */}
-                    {time === currentTime.split(':')[0] + ':00' && (
-                      <div className="absolute left-0 right-0 top-0 h-0.5 bg-red-500 z-10">
-                        <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-red-500"></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Calendar events positioned absolutely */}
-              {calendarEvents.map((event) => {
-                const startHour = parseInt(event.start.split(':')[0]);
-                const startMin = parseInt(event.start.split(':')[1]);
-                const endHour = parseInt(event.end.split(':')[0]);
-                const endMin = parseInt(event.end.split(':')[1]);
-                
-                const top = (startHour * 40 + startMin * 40 / 60);
-                const height = ((endHour * 60 + endMin) - (startHour * 60 + startMin)) * 40 / 60;
-                
-                return (
-                  <div
-                    key={event.id}
-                    className={`absolute left-16 right-2 ${event.color} border-l-4 rounded-lg p-2 text-xs font-bold shadow-sm z-5`}
-                    style={{
-                      top: `${top}px`,
-                      height: `${height}px`,
-                    }}
-                  >
-                    <div className="text-[#2B3674]">{event.title}</div>
-                    <div className="text-[#A3AED0] text-[10px] mt-0.5">
-                      {event.start} - {event.end}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <CalendarWidget meds={patientMedications} events={patientEventsStore} agenda={agenda} />
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
@@ -236,11 +156,21 @@ export function DashboardPage() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="space-y-6"
         >
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <div className="w-8 h-8 rounded-lg bg-[#E9E3FF] flex items-center justify-center">
               <CalendarIcon className="w-4 h-4 text-[#4318FF]" />
             </div>
             <h2 className="text-xl font-bold text-[#2B3674]">My Agenda</h2>
+            {pendingCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">
+                {pendingCount} pending
+              </span>
+            )}
+            {overdueCount > 0 && (
+              <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
+                {overdueCount} overdue
+              </span>
+            )}
           </div>
 
           <div className="bg-white rounded-[20px] p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)]">

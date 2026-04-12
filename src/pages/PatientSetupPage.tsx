@@ -5,13 +5,16 @@ import { User, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import * as Select from "@radix-ui/react-select";
 import { Footer } from "@/components/layout/Footer";
+import { patientService } from "@/services/patient";
+import { useAuth } from "@/context/AuthContext";
 
 const AGE_RANGES = ["50-59", "60-69", "70-79", "80-89", "90-100", "Over 100"];
 
 export function PatientSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const generatedId = location.state?.caregiverId || Math.floor(100000 + Math.random() * 900000);
+  const { user, setPatient } = useAuth();
+  const generatedId = user?.caregiverId ?? location.state?.caregiverId ?? Math.floor(100000 + Math.random() * 900000);
 
   const [patientNickname, setPatientNickname] = useState("");
   const [ageRange, setAgeRange] = useState("");
@@ -28,27 +31,28 @@ export function PatientSetupPage() {
     mouseY.set(y);
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientNickname || !ageRange) {
       toast.error("Please fill in all fields");
       return;
     }
-    
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Save globally so it's consistent across the app
-      localStorage.setItem("parkicare_patient_nickname", patientNickname);
-      localStorage.setItem("parkicare_patient_age", ageRange);
-      localStorage.setItem("parkicare_caregiver_id", generatedId.toString());
-      window.dispatchEvent(new Event('parkicare_user_update'));
 
-      navigate("/profile", { state: { caregiverId: generatedId, patientNickname, ageRange } });
+    setIsLoading(true);
+    try {
+      const data = await patientService.createPatient(
+        Number(generatedId),
+        patientNickname,
+        ageRange,
+      );
+      setPatient({ patientId: data.id, patientNickname: data.patientNickname, patientAge: data.ageRange });
       toast.success("Setup complete!");
-    }, 1500);
+      navigate("/profile", { state: { caregiverId: generatedId, patientNickname, ageRange } });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Patient setup failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {
