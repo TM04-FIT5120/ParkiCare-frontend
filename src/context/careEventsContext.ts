@@ -8,7 +8,9 @@ export type Medication = {
   dose: string;
   frequency: string;
   time: string;
-  startDate?: string;       // "YYYY-MM-DD" — when this plan starts (recurring from this date)
+  startDate?: string;       // "YYYY-MM-DD" — when this plan starts
+  endDate?: string;         // "YYYY-MM-DD" — when this plan ends (undefined = ongoing)
+  recurrence?: string;      // "none" | "daily" | "weekdays" | "weekly"
 };
 
 export type CareEvent = {
@@ -20,6 +22,7 @@ export type CareEvent = {
   time: string;
   startDatetime?: string;           // full ISO string e.g. "2026-04-12T09:00:00"
   endDatetime?: string;             // full ISO string e.g. "2026-04-12T10:00:00"
+  recurrence?: string;              // "none" | "daily" | "weekdays" | "weekly"
 };
 
 export type CareEventsContextValue = {

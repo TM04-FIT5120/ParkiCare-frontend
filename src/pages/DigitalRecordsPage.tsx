@@ -180,7 +180,7 @@ export function DigitalRecordsPage() {
 
         <div className="p-8">
           <div className="mb-6">
-            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit â€¢ Period: March 20 - March 28, 2026</p>
+            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit • Period: March 20 - March 28, 2026</p>
           </div>
 
           {activeTab1 === "detailed" && (
@@ -372,7 +372,7 @@ export function DigitalRecordsPage() {
 
         <div className="p-4 sm:p-8">
           <div className="mb-4 sm:mb-6">
-            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit â€¢ Period: March 20 - March 28, 2026</p>
+            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit • Period: March 20 - March 28, 2026</p>
           </div>
 
           {activeTab2 === "detailed" && (
@@ -560,7 +560,7 @@ export function DigitalRecordsPage() {
 
         <div className="p-4 sm:p-8">
           <div className="mb-4 sm:mb-6">
-            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit â€¢ Period: March 20 - March 28, 2026</p>
+            <p className="text-xs text-[#A3AED0] font-bold">Since Last Medical Visit • Period: March 20 - March 28, 2026</p>
           </div>
 
           {activeTab3 === "detailed" && (

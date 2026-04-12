@@ -5,6 +5,7 @@ export interface DrugBase {
   drugName: string;
   dosage: string;
   frequency: string;
+  manufacturerName: string;
 }
 
 export const drugsService = {
@@ -22,6 +23,13 @@ export const drugsService = {
 
   getDrugById: async (drugId: number): Promise<DrugBase> => {
     const res = await api.get<DrugBase>(`/reference/${drugId}`);
+    return res.data;
+  },
+
+  searchManufacturers: async (keyword: string): Promise<string[]> => {
+    const res = await api.get<string[]>("/reference/manufacturers", {
+      params: { keyword },
+    });
     return res.data;
   },
 };

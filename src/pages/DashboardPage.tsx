@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,17 +10,64 @@ import {
   Circle,
   Activity,
   Heart,
-  Stethoscope,
-  Video,
   X,
   MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
-import { dashboardService, type TaskResponse } from "@/services/dashboard";
+import {
+  listCaregiverEventOccurrences,
+  upsertCaregiverEventOccurrence,
+} from "@/services/caregiverEventOccurrences";
+import { dashboardService } from "@/services/dashboard";
 import { useAuth } from "@/context/AuthContext";
 import { CalendarWidget } from "@/components/CalendarWidget";
+import type { CareEvent } from "@/context/careEventsContext";
+import {
+  addDaysMYT,
+  completionLookupKey,
+  getMYTDateString,
+  isEventOnDay,
+  occurrenceIsoForDay,
+  type EventOccurrenceSourceType,
+} from "@/lib/eventRecurrence";
+
+const HOURS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+const MINUTES = ["00","05","10","15","20","25","30","35","40","45","50","55"];
+
+function to24h(hour: string, minute: string, period: string): string {
+  let h = parseInt(hour, 10);
+  if (period === "AM" && h === 12) h = 0;
+  if (period === "PM" && h !== 12) h += 12;
+  return `${String(h).padStart(2, "0")}:${minute}`;
+}
+
+function getDayName(dateStr: string): string {
+  if (!dateStr) return "Sunday";
+  return new Date(dateStr).toLocaleDateString("en-US", { weekday: "long" });
+}
+
+function formatDisplayTime(hour: string, minute: string, period: string): string {
+  return `${hour}:${minute} ${period}`;
+}
+
+function resolveOutdoorSourceId(e: CareEvent): number {
+  if (e.backendId != null) return e.backendId;
+  if (e.id > 100_000) return e.id - 100_000;
+  return e.id;
+}
+
+type DashboardScheduleRow = {
+  rowKey: string;
+  sourceType: EventOccurrenceSourceType;
+  sourceId: number;
+  occurrenceStart: string;
+  title: string;
+  time: string;
+  completed: boolean;
+  source: "caregiver" | "medication" | "home" | "outdoor";
+};
 
 export function DashboardPage() {
   const { meds: patientMedications, events: patientEventsStore } = useCareEvents();
@@ -29,21 +76,55 @@ export function DashboardPage() {
   const caregiverId = user?.caregiverId ?? 0;
 
   const [newEventTitle, setNewEventTitle] = useState("");
-  const [newEventStartTime, setNewEventStartTime] = useState("");
-  const [newEventEndTime, setNewEventEndTime] = useState("");
-  const [confirmTaskId, setConfirmTaskId] = useState<number | null>(null);
+  const [newEventStartDate, setNewEventStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newEventIsNeverEnding, setNewEventIsNeverEnding] = useState(true);
+  const [newEventEndDate, setNewEventEndDate] = useState("");
+  const [newEventRecurrence, setNewEventRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
+  const [newEventTimeHour, setNewEventTimeHour] = useState("08");
+  const [newEventTimeMinute, setNewEventTimeMinute] = useState("00");
+  const [newEventTimePeriod, setNewEventTimePeriod] = useState("AM");
+  const [newEventEndTimeHour, setNewEventEndTimeHour] = useState("09");
+  const [newEventEndTimeMinute, setNewEventEndTimeMinute] = useState("00");
+  const [newEventEndTimePeriod, setNewEventEndTimePeriod] = useState("AM");
+  const [confirmRow, setConfirmRow] = useState<DashboardScheduleRow | null>(null);
+  const [confirmMode, setConfirmMode] = useState<"complete" | "undo" | null>(null);
+  const [completionKeys, setCompletionKeys] = useState<Set<string>>(() => new Set());
   const [pendingCount, setPendingCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
-  const [upcomingTasks, setUpcomingTasks] = useState<TaskResponse[]>([]);
 
-  const [agenda, setAgenda] = useState<{
-    id: number;
-    title: string;
-    time: string;
-    startDatetime: string;
-    endDatetime: string;
-    completed: boolean;
-  }[]>([]);
+  const [agenda, setAgenda] = useState<
+    {
+      id: number;
+      title: string;
+      time: string;
+      startDatetime: string;
+      endDatetime: string;
+      recurrence: string | null;
+    }[]
+  >([]);
+
+  const refreshCompletions = useCallback(async () => {
+    if (!caregiverId) return;
+    try {
+      const from = addDaysMYT(-14);
+      const to = addDaysMYT(60);
+      const list = await listCaregiverEventOccurrences(caregiverId, from, to);
+      const next = new Set<string>();
+      for (const o of list) {
+        if (o.completed !== 1) continue;
+        next.add(
+          completionLookupKey(
+            o.sourceType as EventOccurrenceSourceType,
+            o.sourceId,
+            o.occurrenceStart,
+          ),
+        );
+      }
+      setCompletionKeys(next);
+    } catch {
+      // keep existing keys on failure
+    }
+  }, [caregiverId]);
 
   // Fetch caregiver schedules + dashboard summary from API on mount
   useEffect(() => {
@@ -57,30 +138,29 @@ export function DashboardPage() {
           time: s.startDatetime.slice(11, 16),
           startDatetime: s.startDatetime,
           endDatetime: s.endDatetime,
-          completed: false,
+          recurrence: s.recurrence ?? null,
         })),
       );
     }).catch(() => {});
 
     dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
     dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
-    dashboardService.getUpcomingTasks(caregiverId).then(setUpcomingTasks).catch(() => {});
   }, [caregiverId]);
 
-  const patientPlans = upcomingTasks.slice(0, 2).map((t) => ({
-    id: t.id,
-    title: t.title,
-    time: t.time,
-    icon: t.type === "medication" ? Pill : t.type === "outdoor" ? Stethoscope : Video,
-  }));
+  useEffect(() => {
+    refreshCompletions();
+  }, [refreshCompletions]);
 
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEventTitle || !newEventStartTime || !newEventEndTime) return;
+    if (!newEventTitle) return;
 
-    const today = new Date().toISOString().slice(0, 10);
-    const startDatetime = `${today}T${newEventStartTime}:00`;
-    const endDatetime = `${today}T${newEventEndTime}:00`;
+    const startTime24 = to24h(newEventTimeHour, newEventTimeMinute, newEventTimePeriod);
+    const endTime24 = to24h(newEventEndTimeHour, newEventEndTimeMinute, newEventEndTimePeriod);
+    const startDatetime = `${newEventStartDate}T${startTime24}:00`;
+    const endDateBase = (!newEventIsNeverEnding && newEventEndDate) ? newEventEndDate : newEventStartDate;
+    const endDatetime = `${endDateBase}T${endTime24}:00`;
+    const recurrence = newEventRecurrence !== "none" ? newEventRecurrence : null;
 
     try {
       const created = await caregiverScheduleService.createSchedule(
@@ -89,52 +169,164 @@ export function DashboardPage() {
         startDatetime,
         endDatetime,
         "",
+        recurrence,
       );
       setAgenda((prev) =>
-        [...prev, { id: created.id, title: created.scheduleTitle, time: newEventStartTime, startDatetime, endDatetime, completed: false }]
-          .sort((a, b) => a.time.localeCompare(b.time)),
+        [...prev, {
+          id: created.id,
+          title: created.scheduleTitle,
+          time: startTime24,
+          startDatetime,
+          endDatetime,
+          recurrence: created.recurrence ?? null,
+        }].sort((a, b) => a.time.localeCompare(b.time)),
       );
       toast.success("Event added successfully");
     } catch {
-      // Fallback: add locally if API is unavailable
       setAgenda((prev) =>
-        [...prev, { id: Date.now(), title: newEventTitle, time: newEventStartTime, startDatetime, endDatetime, completed: false }]
-          .sort((a, b) => a.time.localeCompare(b.time)),
+        [...prev, {
+          id: Date.now(),
+          title: newEventTitle,
+          time: startTime24,
+          startDatetime,
+          endDatetime,
+          recurrence: recurrence ?? null,
+        }].sort((a, b) => a.time.localeCompare(b.time)),
       );
       toast.success("Event added locally");
     }
 
     setNewEventTitle("");
-    setNewEventStartTime("");
-    setNewEventEndTime("");
+    setNewEventStartDate(new Date().toISOString().slice(0, 10));
+    setNewEventIsNeverEnding(true);
+    setNewEventEndDate("");
+    setNewEventRecurrence("none");
+    setNewEventTimeHour("08");
+    setNewEventTimeMinute("00");
+    setNewEventTimePeriod("AM");
+    setNewEventEndTimeHour("09");
+    setNewEventEndTimeMinute("00");
+    setNewEventEndTimePeriod("AM");
   };
 
-  const handleTaskClick = (id: number, completed: boolean) => {
-    if (!completed) {
-      setConfirmTaskId(id);
+  const handleTaskClick = (row: DashboardScheduleRow) => {
+    setConfirmRow(row);
+    setConfirmMode(row.completed ? "undo" : "complete");
+  };
+
+  const handleConfirmComplete = async () => {
+    if (confirmRow == null || !caregiverId) return;
+    const wantComplete = confirmMode === "complete";
+    const key = confirmRow.rowKey;
+    const snapshot = new Set(completionKeys);
+    if (wantComplete) {
+      setCompletionKeys((s) => new Set(s).add(key));
     } else {
-      toggleAgendaItem(id);
+      setCompletionKeys((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
     }
-  };
-
-  const handleConfirmComplete = () => {
-    if (confirmTaskId) {
-      toggleAgendaItem(confirmTaskId);
-      toast.success("Task marked as complete!");
-      setConfirmTaskId(null);
+    try {
+      await upsertCaregiverEventOccurrence({
+        caregiverId,
+        sourceType: confirmRow.sourceType,
+        sourceId: confirmRow.sourceId,
+        occurrenceStart: confirmRow.occurrenceStart,
+        completed: wantComplete,
+      });
+      toast.success(confirmMode === "undo" ? "Task marked as incomplete." : "Task marked as complete!");
+    } catch (err) {
+      setCompletionKeys(snapshot);
+      toast.error(err instanceof Error ? err.message : "Could not save completion");
     }
+    setConfirmRow(null);
+    setConfirmMode(null);
   };
 
   const handleCancelComplete = () => {
-    setConfirmTaskId(null);
+    setConfirmRow(null);
+    setConfirmMode(null);
   };
 
-  const toggleAgendaItem = (id: number) => {
-    setAgenda(agenda.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
-  };
+  const viewDay = getMYTDateString();
 
-  // Caregiver Schedule: use API-backed agenda (already sorted)
-  const caregiverSchedule = agenda;
+  const caregiverSchedule = useMemo((): DashboardScheduleRow[] => {
+    const rows: DashboardScheduleRow[] = [];
+
+    for (const item of agenda) {
+      const startDate = item.startDatetime.slice(0, 10);
+      const endDatePart = item.endDatetime?.slice(0, 10);
+      const seriesEndDate =
+        endDatePart && endDatePart > startDate ? endDatePart : undefined;
+      const rec = item.recurrence ?? "none";
+      if (!isEventOnDay(viewDay, startDate, seriesEndDate, rec)) continue;
+      const startTime = item.startDatetime.slice(11, 16);
+      const occurrenceStart = occurrenceIsoForDay(viewDay, startTime);
+      const rowKey = completionLookupKey("CAREGIVER_SCHEDULE", item.id, occurrenceStart);
+      rows.push({
+        rowKey,
+        sourceType: "CAREGIVER_SCHEDULE",
+        sourceId: item.id,
+        occurrenceStart,
+        title: item.title,
+        time: item.time,
+        completed: completionKeys.has(rowKey),
+        source: "caregiver",
+      });
+    }
+
+    for (const med of patientMedications) {
+      if (!med.time) continue;
+      const startDate = med.startDate ?? viewDay;
+      if (!isEventOnDay(viewDay, startDate, med.endDate, med.recurrence ?? "daily")) continue;
+      const sid = med.remindId ?? med.id;
+      const occurrenceStart = occurrenceIsoForDay(viewDay, med.time);
+      const rowKey = completionLookupKey("MEDICATION_PLAN", sid, occurrenceStart);
+      rows.push({
+        rowKey,
+        sourceType: "MEDICATION_PLAN",
+        sourceId: sid,
+        occurrenceStart,
+        title: `${med.name}${med.dose ? ` · ${med.dose}` : ""}`,
+        time: med.time,
+        completed: completionKeys.has(rowKey),
+        source: "medication",
+      });
+    }
+
+    for (const ev of patientEventsStore) {
+      if (!ev.startDatetime) continue;
+      const startDate = ev.startDatetime.slice(0, 10);
+      const endDatePart = ev.endDatetime?.slice(0, 10);
+      const seriesEndDate =
+        endDatePart && endDatePart > startDate ? endDatePart : undefined;
+      if (!isEventOnDay(viewDay, startDate, seriesEndDate, ev.recurrence)) continue;
+      const startTime = ev.startDatetime.slice(11, 16);
+      const occurrenceStart = occurrenceIsoForDay(viewDay, startTime);
+      const isOutdoor = ev.eventType === "outdoor";
+      const sourceType: EventOccurrenceSourceType = isOutdoor
+        ? "PATIENT_OUTDOOR"
+        : "PATIENT_HOME_CARE";
+      const sourceId = isOutdoor ? resolveOutdoorSourceId(ev) : (ev.backendId ?? ev.id);
+      const rowKey = completionLookupKey(sourceType, sourceId, occurrenceStart);
+      rows.push({
+        rowKey,
+        sourceType,
+        sourceId,
+        occurrenceStart,
+        title: ev.title,
+        time: ev.time ?? startTime,
+        completed: completionKeys.has(rowKey),
+        source: isOutdoor ? "outdoor" : "home",
+      });
+    }
+
+    return rows.sort((a, b) => a.time.localeCompare(b.time));
+  }, [agenda, patientMedications, patientEventsStore, completionKeys, viewDay]);
+
+  const confirmTaskTitle = confirmRow?.title;
 
   return (
     <>
@@ -145,7 +337,12 @@ export function DashboardPage() {
         transition={{ duration: 0.6, delay: 0.15 }}
         className="mb-8"
       >
-        <CalendarWidget meds={patientMedications} events={patientEventsStore} agenda={agenda} />
+        <CalendarWidget
+          meds={patientMedications}
+          events={patientEventsStore}
+          agenda={agenda}
+          completionKeys={completionKeys}
+        />
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
@@ -183,48 +380,80 @@ export function DashboardPage() {
                 {caregiverSchedule.length === 0 ? (
                   <p className="text-sm text-[#A3AED0] text-center py-8 bg-[#F4F7FE] rounded-[20px] font-bold">No tasks scheduled.</p>
                 ) : (
-                  caregiverSchedule.map((item) => (
-                    <div 
-                      key={item.id} 
-                      onClick={() => handleTaskClick(item.id, item.completed)}
-                      className={`flex items-center gap-4 p-4 rounded-[20px] transition-all cursor-pointer group ${
-                        item.completed 
-                          ? 'bg-[#F4F7FE]' 
-                          : 'bg-white border border-[#E0E5F2] hover:border-[#4318FF]/30 hover:shadow-md hover:-translate-y-0.5'
-                      }`}
-                    >
-                      <button type="button" className="shrink-0 flex items-center justify-center focus:outline-none">
-                        {item.completed ? (
-                          <CheckCircle2 className="w-7 h-7 text-[#4318FF]" />
-                        ) : (
-                          <Circle className="w-7 h-7 text-[#A3AED0] group-hover:text-[#4318FF] transition-colors" />
+                  caregiverSchedule.map((item) => {
+                    const isCaregiver = item.source === "caregiver";
+                    const sourceIcon = item.source === "medication"
+                      ? <Circle className="w-4 h-4 text-[#4318FF]" />
+                      : item.source === "outdoor"
+                      ? <Circle className="w-4 h-4 text-blue-500" />
+                      : <Circle className="w-4 h-4 text-orange-500" />;
+                    const sourceBadge = item.source === "medication"
+                      ? { label: "Medication", cls: "text-[#4318FF] bg-[#E9E3FF]" }
+                      : item.source === "outdoor"
+                      ? { label: "Outdoor", cls: "text-blue-600 bg-blue-50" }
+                      : item.source === "home"
+                      ? { label: "Care", cls: "text-orange-600 bg-orange-50" }
+                      : null;
+
+                    const rowClasses = `flex items-center gap-4 p-4 rounded-[20px] transition-all w-full text-left cursor-pointer group ${
+                      item.completed
+                        ? "bg-[#F4F7FE]"
+                        : "bg-white border border-[#E0E5F2] hover:border-[#4318FF]/30 hover:shadow-md hover:-translate-y-0.5"
+                    }`;
+
+                    return (
+                      <button
+                        key={item.rowKey}
+                        type="button"
+                        onClick={() => handleTaskClick(item)}
+                        className={rowClasses}
+                      >
+                        <div className="shrink-0 w-9 h-9 rounded-xl bg-[#F4F7FE] flex items-center justify-center">
+                          {item.completed
+                            ? <CheckCircle2 className="w-5 h-5 text-[#4318FF]" />
+                            : isCaregiver
+                            ? <Circle className="w-4 h-4 text-[#A3AED0] group-hover:text-[#4318FF] transition-colors" />
+                            : sourceIcon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`font-bold text-[15px] truncate ${item.completed ? "text-[#A3AED0] line-through" : "text-[#2B3674]"}`}>
+                            {item.title}
+                          </h4>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p className="text-xs font-bold text-[#A3AED0] flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                              {item.time}
+                            </p>
+                            {item.completed && (
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-[#4318FF] bg-[#E9E3FF] px-2 py-0.5 rounded-md">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {sourceBadge && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${sourceBadge.cls}`}>
+                            {sourceBadge.label}
+                          </span>
                         )}
                       </button>
-                      <div className="flex-1">
-                        <h4 className={`font-bold text-[15px] ${item.completed ? 'text-[#A3AED0] line-through' : 'text-[#2B3674]'}`}>
-                          {item.title}
-                        </h4>
-                        <p className="text-xs font-bold text-[#A3AED0] mt-1 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5" />
-                          {item.time}
-                        </p>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
 
-            {/* Schedule New Event Form - MOVED TO BOTTOM */}
+            {/* Schedule New Event Form */}
             <div className="p-5 bg-[#F4F7FE] rounded-[20px] border-none">
               <h3 className="font-bold text-[#2B3674] mb-4 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-[#4318FF]" /> Schedule New Event
               </h3>
               <form onSubmit={handleAddEvent} className="space-y-4">
+                {/* Event Name */}
                 <div>
                   <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2 block ml-1">Event Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newEventTitle}
                     onChange={(e) => setNewEventTitle(e.target.value)}
                     placeholder="e.g., Grocery Shopping"
@@ -232,31 +461,173 @@ export function DashboardPage() {
                     required
                   />
                 </div>
+
+                {/* Start Date */}
                 <div>
-                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2 block ml-1">Start Time</label>
-                  <input 
-                    type="time" 
-                    value={newEventStartTime}
-                    onChange={(e) => setNewEventStartTime(e.target.value)}
+                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
+                    <CalendarIcon className="w-3.5 h-3.5 inline mr-1" />Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={newEventStartDate}
+                    onChange={(e) => setNewEventStartDate(e.target.value)}
                     className="w-full px-4 py-3 bg-white border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all shadow-sm"
-                    required
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2 block ml-1">End Time</label>
-                  <input 
-                    type="time" 
-                    value={newEventEndTime}
-                    onChange={(e) => setNewEventEndTime(e.target.value)}
-                    className="w-full px-4 py-3 bg-white border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all shadow-sm"
-                    required
-                  />
+
+                {/* End date toggle */}
+                <div
+                  className="flex items-center justify-between p-4 bg-white rounded-xl cursor-pointer select-none shadow-sm"
+                  onClick={() => setNewEventIsNeverEnding(v => !v)}
+                >
+                  <div>
+                    <p className="text-sm font-bold text-[#2B3674]">End date</p>
+                    <p className="text-xs text-[#A3AED0] mt-0.5">Set an end date for this event</p>
+                  </div>
+                  <div className={`w-11 h-6 rounded-full transition-all relative ${!newEventIsNeverEnding ? "bg-[#4318FF]" : "bg-[#E0E5F2]"}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${!newEventIsNeverEnding ? "left-6" : "left-1"}`} />
+                  </div>
                 </div>
-                <button 
+
+                {/* End Date */}
+                {!newEventIsNeverEnding && (
+                  <div>
+                    <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">End Date</label>
+                    <input
+                      type="date"
+                      value={newEventEndDate}
+                      min={newEventStartDate}
+                      onChange={(e) => setNewEventEndDate(e.target.value)}
+                      className="w-full px-4 py-3 bg-white border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all shadow-sm"
+                    />
+                  </div>
+                )}
+
+                {/* Repeat */}
+                <div>
+                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">Repeat</label>
+                  <div className="space-y-2">
+                    {([
+                      { value: "daily", label: "Daily" },
+                      { value: "weekdays", label: "Weekdays (Mon – Fri)" },
+                      { value: "weekly", label: `Weekly on ${getDayName(newEventStartDate)}` },
+                      { value: "none", label: "No repeat" },
+                    ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => (
+                      <label
+                        key={opt.value}
+                        className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all ${newEventRecurrence === opt.value ? "bg-[#E9E3FF] border border-[#4318FF]/30" : "bg-white hover:bg-[#E9E3FF]/50 shadow-sm"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="newEventRecurrence"
+                          value={opt.value}
+                          checked={newEventRecurrence === opt.value}
+                          onChange={() => setNewEventRecurrence(opt.value)}
+                          className="accent-[#4318FF] w-4 h-4"
+                        />
+                        <span className="text-sm font-bold text-[#2B3674]">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Event Time */}
+                <div>
+                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
+                    Event Time — {formatDisplayTime(newEventTimeHour, newEventTimeMinute, newEventTimePeriod)}
+                  </label>
+                  <div className="p-4 bg-white rounded-xl shadow-sm">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Hour</p>
+                        <select
+                          value={newEventTimeHour}
+                          onChange={(e) => setNewEventTimeHour(e.target.value)}
+                          className="w-full px-2 py-2.5 bg-[#F4F7FE] border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
+                        >
+                          {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Minute</p>
+                        <select
+                          value={newEventTimeMinute}
+                          onChange={(e) => setNewEventTimeMinute(e.target.value)}
+                          className="w-full px-2 py-2.5 bg-[#F4F7FE] border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
+                        >
+                          {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Period</p>
+                        <div className="flex rounded-lg overflow-hidden border border-[#E0E5F2]">
+                          {["AM", "PM"].map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setNewEventTimePeriod(p)}
+                              className={`flex-1 py-2.5 text-xs font-bold transition-all ${newEventTimePeriod === p ? "bg-[#4318FF] text-white" : "bg-white text-[#A3AED0] hover:bg-[#F4F7FE]"}`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
+                    End Time — {formatDisplayTime(newEventEndTimeHour, newEventEndTimeMinute, newEventEndTimePeriod)}
+                  </label>
+                  <div className="p-4 bg-white rounded-xl shadow-sm">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Hour</p>
+                        <select
+                          value={newEventEndTimeHour}
+                          onChange={(e) => setNewEventEndTimeHour(e.target.value)}
+                          className="w-full px-2 py-2.5 bg-[#F4F7FE] border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
+                        >
+                          {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Minute</p>
+                        <select
+                          value={newEventEndTimeMinute}
+                          onChange={(e) => setNewEventEndTimeMinute(e.target.value)}
+                          className="w-full px-2 py-2.5 bg-[#F4F7FE] border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
+                        >
+                          {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Period</p>
+                        <div className="flex rounded-lg overflow-hidden border border-[#E0E5F2]">
+                          {["AM", "PM"].map(p => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setNewEventEndTimePeriod(p)}
+                              className={`flex-1 py-2.5 text-xs font-bold transition-all ${newEventEndTimePeriod === p ? "bg-[#4318FF] text-white" : "bg-white text-[#A3AED0] hover:bg-[#F4F7FE]"}`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
                   type="submit"
                   className="w-full py-3 mt-2 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] flex items-center justify-center gap-2 active:scale-[0.98]"
                 >
-                  Add
+                  Add Event
                 </button>
               </form>
             </div>
@@ -288,10 +659,10 @@ export function DashboardPage() {
               {patientMedications.length > 0 ? (
                 patientMedications.map(med => (
                   <div key={med.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#F4F7FE] hover:shadow-sm transition-all">
-                    <Circle className="w-5 h-5 text-[#A3AED0]" />
+                    <Pill className="w-5 h-5 text-[#A3AED0]" />
                     <div className="flex-1">
                       <h4 className="font-bold text-[#2B3674] text-sm">{med.name}</h4>
-                      <p className="text-xs text-[#A3AED0] font-bold mt-0.5">{med.dose} â€¢ {med.frequency}</p>
+                      <p className="text-xs text-[#A3AED0] font-bold mt-0.5">{med.dose} • {med.frequency}</p>
                     </div>
                     <span className="text-xs font-bold text-[#4318FF] bg-[#E9E3FF] px-3 py-1 rounded-lg">
                       {med.time}
@@ -318,13 +689,12 @@ export function DashboardPage() {
               Daily Care List
             </h3>
             <div className="space-y-3">
-              {patientEventsStore.length > 0 ? (
-                patientEventsStore.map((ev, index) => (
+              {patientEventsStore.filter(ev => ev.eventType === "home").length > 0 ? (
+                patientEventsStore.filter(ev => ev.eventType === "home").map((ev, index) => (
                   <div key={`care-${ev.id || index}`} className="flex items-center gap-3 p-3 rounded-xl bg-[#F4F7FE] hover:shadow-sm transition-all">
-                    <Circle className="w-5 h-5 text-[#A3AED0]" />
+                    <Heart className="w-5 h-5 text-[#A3AED0]" />
                     <div className="flex-1">
-                      <h4 className="font-bold text-[#2B3674] text-sm">{ev.type}</h4>
-                      <p className="text-xs text-[#A3AED0] font-bold mt-0.5">{ev.title}</p>
+                      <h4 className="font-bold text-[#2B3674] text-sm">{ev.title}</h4>
                     </div>
                     <span className="text-xs font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
                       {ev.time}
@@ -348,20 +718,24 @@ export function DashboardPage() {
           <div className="bg-white rounded-[20px] p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)]">
             <h3 className="text-lg font-bold text-[#2B3674] mb-4 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-[#4318FF]" />
-              Add Outdoor Event
+              Outdoor Event List
             </h3>
-            <div className="flex flex-col sm:flex-row gap-4">
-              {patientPlans.map((plan, index) => (
-                <div key={`patient-plan-${plan.id || index}`} className="flex-1 flex items-center gap-4 p-4 rounded-[20px] bg-[#E9E3FF] border-none hover:shadow-sm transition-all cursor-default">
-                  <div className="w-11 h-11 rounded-xl bg-white shadow-sm text-[#4318FF] flex items-center justify-center shrink-0">
-                    <plan.icon className="w-5 h-5" />
+            <div className="space-y-3">
+              {patientEventsStore.filter(ev => ev.eventType === "outdoor").length > 0 ? (
+                patientEventsStore.filter(ev => ev.eventType === "outdoor").map((ev, index) => (
+                  <div key={`outdoor-${ev.id || index}`} className="flex items-center gap-3 p-3 rounded-xl bg-[#F4F7FE] hover:shadow-sm transition-all">
+                    <MapPin className="w-5 h-5 text-[#A3AED0]" />
+                    <div className="flex-1">
+                      <h4 className="font-bold text-[#2B3674] text-sm">{ev.title}</h4>
+                    </div>
+                    <span className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1 rounded-lg">
+                      {ev.time}
+                    </span>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-[#4318FF]">{plan.title}</h4>
-                    <p className="text-sm font-bold text-[#4318FF]/80 mt-0.5">{plan.time}</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-[#A3AED0] font-bold text-center py-4">No outdoor events scheduled</p>
+              )}
             </div>
             <button
               type="button"
@@ -378,7 +752,7 @@ export function DashboardPage() {
 
       {/* Confirmation Modal */}
       <AnimatePresence>
-        {confirmTaskId !== null && (
+        {confirmRow !== null && (
           <>
             {/* Backdrop */}
             <motion.div
@@ -390,15 +764,18 @@ export function DashboardPage() {
             />
             
             {/* Modal */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-50 p-4"
+              className="w-full max-w-md pointer-events-auto"
             >
               <div className="bg-white rounded-[20px] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)]">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-[#2B3674]">Complete Task?</h3>
+                  <h3 className="text-lg font-bold text-[#2B3674]">
+                    {confirmMode === "undo" ? "Undo Task?" : "Complete Task?"}
+                  </h3>
                   <button
                     type="button"
                     onClick={handleCancelComplete}
@@ -407,11 +784,16 @@ export function DashboardPage() {
                     <X className="w-5 h-5 text-[#A3AED0]" />
                   </button>
                 </div>
-                
-                <p className="text-sm text-[#A3AED0] font-bold mb-6">
-                  Are you sure you want to mark this task as complete?
+
+                <p className="text-sm text-[#A3AED0] font-bold mb-2">
+                  {confirmTaskTitle && (
+                    <span className="block text-[#2B3674] mb-3">{confirmTaskTitle}</span>
+                  )}
+                  {confirmMode === "undo"
+                    ? "Mark this task as incomplete again?"
+                    : "Mark this task as complete?"}
                 </p>
-                
+
                 <div className="flex gap-3">
                   <button
                     type="button"
@@ -425,11 +807,12 @@ export function DashboardPage() {
                     onClick={handleConfirmComplete}
                     className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
                   >
-                    Yes, Complete
+                    {confirmMode === "undo" ? "Yes, Undo" : "Yes, Complete"}
                   </button>
                 </div>
               </div>
             </motion.div>
+            </div>
           </>
         )}
       </AnimatePresence>

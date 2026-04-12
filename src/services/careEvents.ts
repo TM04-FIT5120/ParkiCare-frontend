@@ -11,6 +11,11 @@ export interface MedicationPlan {
   remindTime: string;
   startDate: string;
   planNote: string;
+  mealTiming: string | null;
+  quantity: number | null;
+  intakeMethod: string | null;
+  endDate: string | null;
+  recurrence: string | null;
 }
 
 // --- Home care types ---
@@ -22,6 +27,7 @@ export interface HomeCareScheduleResponse {
   endDatetime: string;
   careNote: string;
   isUrgent: boolean;
+  recurrence?: string;
 }
 
 // --- Outdoor types ---
@@ -32,6 +38,7 @@ export interface OutdoorScheduleResponse {
   startDatetime: string;
   endDatetime: string;
   prepareNote: string;
+  recurrence?: string;
 }
 
 export const careEventsService = {
@@ -45,6 +52,11 @@ export const careEventsService = {
     remindTime: string,
     startDate: string,
     planNote: string,
+    mealTiming: string | null,
+    quantity: number | null,
+    intakeMethod: string | null,
+    endDate: string | null,
+    recurrence: string | null,
   ): Promise<MedicationPlan> => {
     const res = await api.post<MedicationPlan>("/reminder/plan", {
       patientId,
@@ -55,6 +67,11 @@ export const careEventsService = {
       remindTime,
       startDate,
       planNote,
+      mealTiming,
+      quantity,
+      intakeMethod,
+      endDate,
+      recurrence,
     });
     return res.data;
   },
@@ -64,16 +81,16 @@ export const careEventsService = {
     return res.data;
   },
 
-  confirmMedication: async (remindId: number): Promise<void> => {
-    await api.patch(`/reminder/confirm/${remindId}`);
+  confirmMedication: async (remindId: number, caregiverId: number): Promise<void> => {
+    await api.patch(`/reminder/confirm/${remindId}?caregiverId=${caregiverId}`);
   },
 
-  snoozeMedication: async (remindId: number): Promise<void> => {
-    await api.patch(`/reminder/later/${remindId}`);
+  snoozeMedication: async (remindId: number, caregiverId: number): Promise<void> => {
+    await api.patch(`/reminder/later/${remindId}?caregiverId=${caregiverId}`);
   },
 
-  getPendingReminders: async (patientId: number): Promise<MedicationPlan[]> => {
-    const res = await api.get<MedicationPlan[]>(`/reminder/pending/${patientId}`);
+  getPendingReminders: async (patientId: number, caregiverId: number): Promise<MedicationPlan[]> => {
+    const res = await api.get<MedicationPlan[]>(`/reminder/pending/${patientId}?caregiverId=${caregiverId}`);
     return res.data;
   },
 
@@ -85,6 +102,7 @@ export const careEventsService = {
     endDatetime: string,
     careNote: string,
     isUrgent: boolean = false,
+    recurrence: string = "none",
   ): Promise<HomeCareScheduleResponse> => {
     const res = await api.post<HomeCareScheduleResponse>("/homeCare", {
       patientId,
@@ -92,7 +110,8 @@ export const careEventsService = {
       startDatetime,
       endDatetime,
       careNote,
-      isUrgent,
+      isUrgent: isUrgent ? 1 : 0,
+      recurrence,
     });
     return res.data;
   },
@@ -104,6 +123,8 @@ export const careEventsService = {
 
   updateHomeCare: async (
     id: number,
+    patientId: number,
+    caregiverId: number,
     homeCareTitle: string,
     startDatetime: string,
     endDatetime: string,
@@ -111,17 +132,19 @@ export const careEventsService = {
     isUrgent: boolean = false,
   ): Promise<HomeCareScheduleResponse> => {
     const res = await api.put<HomeCareScheduleResponse>(`/homeCare/${id}`, {
+      patientId,
+      caregiverId,
       homeCareTitle,
       startDatetime,
       endDatetime,
       careNote,
-      isUrgent,
+      isUrgent: isUrgent ? 1 : 0,
     });
     return res.data;
   },
 
-  deleteHomeCare: async (id: number): Promise<void> => {
-    await api.delete(`/homeCare/${id}`);
+  deleteHomeCare: async (id: number, caregiverId: number): Promise<void> => {
+    await api.delete(`/homeCare/${id}?caregiverId=${caregiverId}`);
   },
 
   // Outdoor events
@@ -131,6 +154,7 @@ export const careEventsService = {
     startDatetime: string,
     endDatetime: string,
     prepareNote: string,
+    recurrence: string = "none",
   ): Promise<OutdoorScheduleResponse> => {
     const res = await api.post<OutdoorScheduleResponse>("/outdoor", {
       patientId,
@@ -138,6 +162,7 @@ export const careEventsService = {
       startDatetime,
       endDatetime,
       prepareNote,
+      recurrence,
     });
     return res.data;
   },
@@ -149,12 +174,16 @@ export const careEventsService = {
 
   updateOutdoor: async (
     id: number,
+    patientId: number,
+    caregiverId: number,
     outdoorTitle: string,
     startDatetime: string,
     endDatetime: string,
     prepareNote: string,
   ): Promise<OutdoorScheduleResponse> => {
     const res = await api.put<OutdoorScheduleResponse>(`/outdoor/${id}`, {
+      patientId,
+      caregiverId,
       outdoorTitle,
       startDatetime,
       endDatetime,
@@ -163,7 +192,7 @@ export const careEventsService = {
     return res.data;
   },
 
-  deleteOutdoor: async (id: number): Promise<void> => {
-    await api.delete(`/outdoor/${id}`);
+  deleteOutdoor: async (id: number, caregiverId: number): Promise<void> => {
+    await api.delete(`/outdoor/${id}?caregiverId=${caregiverId}`);
   },
 };

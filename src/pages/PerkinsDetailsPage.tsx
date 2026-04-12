@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Activity, AlertCircle, FileText, Play, Brain, ShieldAlert, ExternalLink, Lightbulb, Clock, Heart, AlertTriangle, Clipboard, Phone } from "lucide-react";
 
 export function PerkinsDetailsPage() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-8">
@@ -50,20 +52,13 @@ export function PerkinsDetailsPage() {
         <div className="md:w-1/2 bg-[#2B3674] relative min-h-[250px] sm:min-h-[350px] md:min-h-[400px] flex flex-col">
           <div className="flex-1 relative">
             {isVideoPlaying ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-[#2B3674] text-white p-8 text-center">
-                <div>
-                  <Brain className="w-16 h-16 text-[#4318FF] mx-auto mb-4 animate-pulse" />
-                  <h3 className="text-xl font-bold mb-2">Video Playing...</h3>
-                  <p className="text-[#A3AED0] text-sm max-w-sm mx-auto font-bold">Covering Core Symptoms: Tremors, rigidity, and bradykinesia, and medication timing.</p>
-                  <button
-                    type="button"
-                    onClick={() => setIsVideoPlaying(false)}
-                    className="mt-6 px-6 py-2 bg-white text-[#2B3674] hover:bg-[#F4F7FE] rounded-full text-sm font-bold transition-colors"
-                  >
-                    Close Video
-                  </button>
-                </div>
-              </div>
+              <video
+                className="absolute inset-0 w-full h-full object-cover"
+                src="/home_video.mp4"
+                controls
+                autoPlay
+                onEnded={() => setIsVideoPlaying(false)}
+              />
             ) : (
               <>
                 <img
@@ -81,7 +76,7 @@ export function PerkinsDetailsPage() {
                 </button>
                 <div className="absolute bottom-8 left-8 right-8 text-center">
                   <p className="text-white font-bold text-lg">Watch: The Fundamentals of Parkinson's Care</p>
-                  <p className="text-[#A3AED0] font-bold text-sm mt-1">3 mins â€¢ Educational Series</p>
+                  <p className="text-[#A3AED0] font-bold text-sm mt-1">3 mins • Educational Series</p>
                 </div>
               </>
             )}
@@ -185,24 +180,24 @@ export function PerkinsDetailsPage() {
           </p>
           <ul className="space-y-2 mb-4">
             <li className="flex items-start gap-2 text-[#707EAE]">
-              <span className="text-[#4318FF] mt-1">â—</span>
+              <span className="text-[#4318FF] mt-1">●</span>
               <span><strong>Sleep Issues:</strong> Acting out dreams, thrashing, or shouting during sleep</span>
             </li>
             <li className="flex items-start gap-2 text-[#707EAE]">
-              <span className="text-[#4318FF] mt-1">â—</span>
+              <span className="text-[#4318FF] mt-1">●</span>
               <span><strong>Digestive Problems:</strong> Severe and persistent constipation</span>
             </li>
             <li className="flex items-start gap-2 text-[#707EAE]">
-              <span className="text-[#4318FF] mt-1">â—</span>
+              <span className="text-[#4318FF] mt-1">●</span>
               <span><strong>Sensory Changes:</strong> A noticeable loss of smell</span>
             </li>
             <li className="flex items-start gap-2 text-[#707EAE]">
-              <span className="text-[#4318FF] mt-1">â—</span>
+              <span className="text-[#4318FF] mt-1">●</span>
               <span><strong>Mood Fluctuations:</strong> Unexplained depression, anxiety, or lack of motivation</span>
             </li>
           </ul>
           <p className="text-[#707EAE] leading-relaxed mb-4">
-            Knowing these issues are actual symptoms of Parkinson'sâ€”and not just "normal aging" or the patient being difficultâ€”can help you provide more patient, empathetic care and communicate better with the neurologist.
+            Knowing these issues are actual symptoms of Parkinson's–and not just "normal aging" or the patient being difficult–can help you provide more patient, empathetic care and communicate better with the neurologist.
           </p>
           <a
             href="https://doi.org/10.1002/mds.26431"
@@ -210,7 +205,7 @@ export function PerkinsDetailsPage() {
             rel="noopener noreferrer"
             className="text-xs text-[#4318FF] hover:underline font-bold"
           >
-            Source: Movement Disorders, 30(12), 1600â€“1611
+            Source: Movement Disorders, 30(12), 1600–1611
           </a>
         </div>
       </motion.section>
@@ -243,19 +238,19 @@ export function PerkinsDetailsPage() {
             <h3 className="text-xl font-bold text-[#2B3674] mb-3">Motor Symptoms</h3>
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Slowness of Movement:</strong> This is actually the most common symptom, affecting over 77% of patients. You might notice your parent taking longer to get dressed, walking with shorter steps, or struggling to stand up from a chair.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Tremors:</strong> Shaking, usually starting in one hand while at rest.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Stiffness:</strong> Muscles feel tight and inflexible, making it hard to swing their arms while walking.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Balance & Gait Issues:</strong> Difficulty turning around, or feeling like their feet are "glued to the floor".</span>
               </li>
             </ul>
@@ -266,19 +261,19 @@ export function PerkinsDetailsPage() {
             <p className="text-[#707EAE] mb-3">These symptoms are often overlooked but can affect daily life even more than motor symptoms.</p>
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Mood Changes:</strong> Depression, apathy, and anxiety often appear together.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Sleep Problems:</strong> Excessive daytime sleepiness, or acting out dreams at night.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Autonomic Issues:</strong> Severe constipation, frequent/urgent urination, and feeling dizzy when standing up.</span>
               </li>
               <li className="flex items-start gap-2 text-[#707EAE]">
-                <span className="text-[#4318FF] mt-1">â—</span>
+                <span className="text-[#4318FF] mt-1">●</span>
                 <span><strong>Pain & Fatigue:</strong> Unexplained muscle aches and feeling constantly tired.</span>
               </li>
             </ul>
@@ -297,7 +292,7 @@ export function PerkinsDetailsPage() {
             Source: Frontiers in Aging Neuroscience, 14(14), 935841
           </a>
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
         </div>
         </div>
@@ -339,7 +334,7 @@ export function PerkinsDetailsPage() {
                 <p className="text-[#707EAE]">They can still live independently. Your main job is to help them establish a medication routine and encourage daily exercise.</p>
               </div>
               <a href="https://doi.org/10.1002/mds.26431" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold mt-2">
-                Source: Movement Disorders, 30(12), 1600â€“1611
+                Source: Movement Disorders, 30(12), 1600–1611
               </a>
             </div>
           </div>
@@ -356,7 +351,7 @@ export function PerkinsDetailsPage() {
                 <p className="text-[#707EAE]">Fall prevention is your top priority. They will need your physical assistance with daily tasks like dressing, bathing, and moving around the house safely.</p>
               </div>
               <a href="https://doi.org/10.1007/s00702-019-02033-9" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold mt-2">
-                Source: Journal of Neural Transmission, 126(7), 841â€“851
+                Source: Journal of Neural Transmission, 126(7), 841–851
               </a>
             </div>
           </div>
@@ -373,7 +368,7 @@ export function PerkinsDetailsPage() {
                 <p className="text-[#707EAE]">They need full-time assistance for all daily activities. At this stage, providing emotional, family, and spiritual comfort becomes just as important as physical care.</p>
               </div>
               <a href="https://doi.org/10.1038/nrneurol.2012.126" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold mt-2">
-                Source: Nature Reviews Neurology, 8(8), 435â€“442
+                Source: Nature Reviews Neurology, 8(8), 435–442
               </a>
             </div>
           </div>
@@ -480,10 +475,10 @@ export function PerkinsDetailsPage() {
 
         <div className="mt-4 space-y-1">
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
           <a href="https://doi.org/10.2147/dnnd.s535306" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Degenerative Neurological and Neuromuscular Disease, Volume 15, 101â€“116
+            Source: Degenerative Neurological and Neuromuscular Disease, Volume 15, 101–116
           </a>
         </div>
         </div>
@@ -525,10 +520,10 @@ export function PerkinsDetailsPage() {
 
         <div className="mt-4 space-y-1">
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
           <a href="https://doi.org/10.2147/dnnd.s535306" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Degenerative Neurological and Neuromuscular Disease, Volume 15, 101â€“116
+            Source: Degenerative Neurological and Neuromuscular Disease, Volume 15, 101–116
           </a>
         </div>
         </div>
@@ -581,15 +576,19 @@ export function PerkinsDetailsPage() {
           </div>
         </div>
 
-        <div className="mt-6 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] p-4 rounded-xl">
+        <button
+          type="button"
+          onClick={() => navigate('/care-events')}
+          className="mt-6 w-full bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] p-4 rounded-xl text-left transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
+        >
           <p className="text-white font-bold flex items-center gap-2">
-            ðŸ‘‰ <span>Tap here to set up your ParkiCare Persistent Medication Reminders now.</span>
+            <span>Tap here to set up your ParkiCare Persistent Medication Reminders now.</span>
           </p>
-        </div>
+        </button>
 
         <div className="mt-4">
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
         </div>
         </div>
@@ -647,7 +646,7 @@ export function PerkinsDetailsPage() {
 
         <div className="mt-4">
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
         </div>
         </div>
@@ -714,7 +713,7 @@ export function PerkinsDetailsPage() {
 
         <div className="mt-4">
           <a href="https://doi.org/10.1080/14737175.2021.1883428" target="_blank" rel="noopener noreferrer" className="block text-xs text-[#4318FF] hover:underline font-bold">
-            Source: Expert Review of Neurotherapeutics, 21(3), 1â€“18
+            Source: Expert Review of Neurotherapeutics, 21(3), 1–18
           </a>
         </div>
         </div>

@@ -7,6 +7,9 @@ export interface CaregiverScheduleResponse {
   startDatetime: string;
   endDatetime: string;
   scheduleNote: string;
+  recurrence: string | null;
+  isCompleted?: number;
+  isConflict?: number;
 }
 
 export const caregiverScheduleService = {
@@ -16,6 +19,7 @@ export const caregiverScheduleService = {
     startDatetime: string,
     endDatetime: string,
     scheduleNote: string,
+    recurrence?: string | null,
   ): Promise<CaregiverScheduleResponse> => {
     const res = await api.post<CaregiverScheduleResponse>("/caregiverSchedule", {
       caregiverId,
@@ -23,6 +27,7 @@ export const caregiverScheduleService = {
       startDatetime,
       endDatetime,
       scheduleNote,
+      recurrence: recurrence || null,
     });
     return res.data;
   },
@@ -34,8 +39,8 @@ export const caregiverScheduleService = {
     return res.data;
   },
 
-  getScheduleById: async (id: number): Promise<CaregiverScheduleResponse> => {
-    const res = await api.get<CaregiverScheduleResponse>(`/caregiverSchedule/${id}`);
+  getScheduleById: async (id: number, caregiverId: number): Promise<CaregiverScheduleResponse> => {
+    const res = await api.get<CaregiverScheduleResponse>(`/caregiverSchedule/${id}?caregiverId=${caregiverId}`);
     return res.data;
   },
 
@@ -55,7 +60,7 @@ export const caregiverScheduleService = {
     return res.data;
   },
 
-  deleteSchedule: async (id: number): Promise<void> => {
-    await api.delete(`/caregiverSchedule/${id}`);
+  deleteSchedule: async (id: number, caregiverId: number): Promise<void> => {
+    await api.delete(`/caregiverSchedule/${id}?caregiverId=${caregiverId}`);
   },
 };

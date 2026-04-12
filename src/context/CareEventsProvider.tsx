@@ -7,6 +7,7 @@ import {
   type Medication,
 } from "@/context/careEventsContext";
 import { careEventsService } from "@/services/careEvents";
+import { drugsService } from "@/services/drugs";
 import { useAuth } from "@/context/AuthContext";
 
 export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
@@ -26,15 +27,23 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
         careEventsService.getOutdoor(pid),
       ]);
 
-      const mappedMeds: Medication[] = apiMeds.map((m) => ({
+      const drugNames = await Promise.all(
+        apiMeds.map((m) =>
+          drugsService.getDrugById(m.drugId).then((d) => d.drugName).catch(() => `Drug #${m.drugId}`)
+        )
+      );
+
+      const mappedMeds: Medication[] = apiMeds.map((m, i) => ({
         id: m.remindId,
         remindId: m.remindId,
         drugId: m.drugId,
-        name: `Drug #${m.drugId}`,
+        name: drugNames[i],
         dose: m.dosage,
         frequency: m.frequency,
         time: m.remindTime,
         startDate: m.startDate,
+        endDate: m.endDate ?? undefined,
+        recurrence: m.recurrence ?? undefined,
       }));
 
       const mappedHome: CareEvent[] = apiHomeCare.map((h) => ({
@@ -46,6 +55,7 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
         time: h.startDatetime.slice(11, 16),
         startDatetime: h.startDatetime,
         endDatetime: h.endDatetime,
+        recurrence: h.recurrence,
       }));
 
       const mappedOutdoor: CareEvent[] = apiOutdoor.map((o) => ({
@@ -57,6 +67,7 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
         time: o.startDatetime.slice(11, 16),
         startDatetime: o.startDatetime,
         endDatetime: o.endDatetime,
+        recurrence: o.recurrence,
       }));
 
       setMeds(mappedMeds);

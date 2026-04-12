@@ -1,18 +1,23 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Medication, CareEvent } from "@/context/careEventsContext";
+import {
+  completionLookupKey,
+  isEventOnDay,
+  occurrenceIsoForDay,
+} from "@/lib/eventRecurrence";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CalendarView = "twoDays" | "week" | "month";
 
-interface AgendaItem {
+export interface AgendaItem {
   id: number;
   title: string;
   time: string;
   startDatetime: string;
   endDatetime: string;
-  completed: boolean;
+  recurrence?: string | null;
 }
 
 interface TimelineEvent {
@@ -23,12 +28,15 @@ interface TimelineEvent {
   bg: string;
   border: string;
   text: string;
+  completed?: boolean;
 }
 
 interface CalendarWidgetProps {
   meds: Medication[];
   events: CareEvent[];
   agenda: AgendaItem[];
+  /** Keys from `completionLookupKey` for occurrences marked complete */
+  completionKeys?: Set<string>;
 }
 
 // ─── Malaysia Time Helpers ────────────────────────────────────────────────────
@@ -75,51 +83,172 @@ const NOW_LINE_COLOR = "#ef4444";
 
 // ─── Event Builder ────────────────────────────────────────────────────────────
 
+function resolveOutdoorSourceId(e: CareEvent): number {
+  if (e.backendId != null) return e.backendId;
+  if (e.id > 100_000) return e.id - 100_000;
+  return e.id;
+}
+
 function buildDay(
   dayStr: string,
   meds: Medication[],
   events: CareEvent[],
   agenda: AgendaItem[],
+  completionKeys?: Set<string>,
 ): TimelineEvent[] {
   const out: TimelineEvent[] = [];
 
   meds.forEach((m) => {
     if (!m.time) return;
-    out.push({ id: `med-${m.id}`, title: m.name,
-      startTime: m.time, endTime: addMinutes(m.time, 30),
-      bg: "bg-purple-50", border: "border-purple-400", text: "text-purple-800" });
+    const startDate = m.startDate ?? dayStr;
+    const rec = m.recurrence ?? "daily";
+    if (!isEventOnDay(dayStr, startDate, m.endDate, rec)) return;
+    const sid = m.remindId ?? m.id;
+    const occurrenceStart = occurrenceIsoForDay(dayStr, m.time);
+    const key = completionLookupKey("MEDICATION_PLAN", sid, occurrenceStart);
+    const completed = completionKeys?.has(key) ?? false;
+    out.push({
+      id: `med-${m.id}-${dayStr}`,
+      title: m.name,
+      startTime: m.time,
+      endTime: addMinutes(m.time, 30),
+      bg: completed ? "bg-slate-100" : "bg-purple-50",
+      border: completed ? "border-slate-300" : "border-purple-400",
+      text: completed ? "text-slate-500 line-through" : "text-purple-800",
+      completed,
+    });
   });
 
-  events
-    .filter((e) => e.eventType === "home" && e.startDatetime?.slice(0, 10) === dayStr)
-    .forEach((e) => out.push({ id: `home-${e.id}`, title: e.title,
-      startTime: e.time, endTime: e.endDatetime ? e.endDatetime.slice(11, 16) : addMinutes(e.time, 60),
-      bg: "bg-orange-50", border: "border-orange-400", text: "text-orange-800" }));
+  (["home", "outdoor"] as const).forEach((evType) => {
+    const style = evType === "home"
+      ? { bg: "bg-orange-50", border: "border-orange-400", text: "text-orange-800" }
+      : { bg: "bg-green-50", border: "border-green-400", text: "text-green-800" };
 
-  events
-    .filter((e) => e.eventType === "outdoor" && e.startDatetime?.slice(0, 10) === dayStr)
-    .forEach((e) => out.push({ id: `outdoor-${e.id}`, title: e.title,
-      startTime: e.time, endTime: e.endDatetime ? e.endDatetime.slice(11, 16) : addMinutes(e.time, 60),
-      bg: "bg-green-50", border: "border-green-400", text: "text-green-800" }));
+    events
+      .filter((e) => e.eventType === evType && !!e.startDatetime)
+      .forEach((e) => {
+        const startDate = e.startDatetime!.slice(0, 10);
+        const endDatePart = e.endDatetime?.slice(0, 10);
+        const seriesEndDate = endDatePart && endDatePart > startDate ? endDatePart : undefined;
 
-  agenda
-    .filter((a) => a.startDatetime?.slice(0, 10) === dayStr)
-    .forEach((a) => out.push({ id: `ag-${a.id}`, title: a.title,
-      startTime: a.time, endTime: a.endDatetime ? a.endDatetime.slice(11, 16) : addMinutes(a.time, 60),
-      bg: "bg-blue-50", border: "border-blue-400", text: "text-blue-800" }));
+        if (!isEventOnDay(dayStr, startDate, seriesEndDate, e.recurrence)) return;
+
+        const startTime = e.startDatetime!.slice(11, 16);
+        const endTime = e.endDatetime ? e.endDatetime.slice(11, 16) : addMinutes(startTime, 60);
+        const sourceId = evType === "home" ? (e.backendId ?? e.id) : resolveOutdoorSourceId(e);
+        const occurrenceStart = occurrenceIsoForDay(dayStr, startTime);
+        const st = evType === "home" ? "PATIENT_HOME_CARE" as const : "PATIENT_OUTDOOR" as const;
+        const key = completionLookupKey(st, sourceId, occurrenceStart);
+        const completed = completionKeys?.has(key) ?? false;
+        out.push({
+          id: `${evType}-${e.id}-${dayStr}`,
+          title: e.title,
+          startTime,
+          endTime,
+          bg: completed ? "bg-slate-100" : style.bg,
+          border: completed ? "border-slate-300" : style.border,
+          text: completed ? "text-slate-500 line-through" : style.text,
+          completed,
+        });
+      });
+  });
+
+  agenda.forEach((a) => {
+    if (!a.startDatetime) return;
+    const startDate = a.startDatetime.slice(0, 10);
+    const endDatePart = a.endDatetime?.slice(0, 10);
+    const seriesEndDate = endDatePart && endDatePart > startDate ? endDatePart : undefined;
+    const rec = a.recurrence ?? "none";
+    if (!isEventOnDay(dayStr, startDate, seriesEndDate, rec)) return;
+    const startTime = a.startDatetime.slice(11, 16);
+    const endTime = a.endDatetime ? a.endDatetime.slice(11, 16) : addMinutes(a.time || startTime, 60);
+    const occurrenceStart = occurrenceIsoForDay(dayStr, startTime);
+    const key = completionLookupKey("CAREGIVER_SCHEDULE", a.id, occurrenceStart);
+    const completed = completionKeys?.has(key) ?? false;
+    out.push({
+      id: `ag-${a.id}-${dayStr}`,
+      title: a.title,
+      startTime,
+      endTime,
+      bg: completed ? "bg-slate-100" : "bg-blue-50",
+      border: completed ? "border-slate-300" : "border-blue-400",
+      text: completed ? "text-slate-500 line-through" : "text-blue-800",
+      completed,
+    });
+  });
 
   return out;
 }
 
+// ─── Overlap Layout ───────────────────────────────────────────────────────────
+
+interface LayoutEvent extends TimelineEvent {
+  col: number;
+  numCols: number;
+  overlapping: boolean;
+}
+
+function timeToMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function eventsOverlap(a: TimelineEvent, b: TimelineEvent): boolean {
+  return timeToMin(a.startTime) < timeToMin(b.endTime) &&
+         timeToMin(b.startTime) < timeToMin(a.endTime);
+}
+
+/**
+ * Assigns side-by-side columns to overlapping events.
+ * Events that overlap any other event get `overlapping = true`.
+ */
+function layoutEvents(events: TimelineEvent[]): LayoutEvent[] {
+  if (events.length === 0) return [];
+
+  // Sort by start time, longer events first on tie
+  const sorted = [...events].sort((a, b) => {
+    const d = timeToMin(a.startTime) - timeToMin(b.startTime);
+    return d !== 0 ? d : timeToMin(b.endTime) - timeToMin(a.endTime);
+  });
+
+  // Greedy column assignment: each slot tracks end-minute of last event placed
+  const colEnds: number[] = [];
+  const assigned: number[] = new Array(sorted.length).fill(0);
+
+  sorted.forEach((ev, i) => {
+    const startMin = timeToMin(ev.startTime);
+    let col = colEnds.findIndex((end) => end <= startMin);
+    if (col === -1) col = colEnds.length;
+    colEnds[col] = timeToMin(ev.endTime);
+    assigned[i] = col;
+  });
+
+  // For each event: numCols = max col of any event that overlaps it + 1
+  return sorted.map((ev, i) => {
+    let maxCol = assigned[i];
+    let overlapping = false;
+    sorted.forEach((other, j) => {
+      if (i !== j && eventsOverlap(ev, other)) {
+        maxCol = Math.max(maxCol, assigned[j]);
+        overlapping = true;
+      }
+    });
+    return { ...ev, col: assigned[i], numCols: maxCol + 1, overlapping };
+  });
+}
+
+const OVERLAP_STYLE = { bg: "bg-red-50", border: "border-red-500", text: "text-red-700" };
+
 function toTop(time: string) {
   const [h, m] = time.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return 0;
   return h * PX + (m * PX) / 60;
 }
 
 // ─── Timeline View (Two Days + Week) ─────────────────────────────────────────
 
 function TimelineView({
-  visibleDays, isTwoDays, todayStr, mytNow, meds, events, agenda,
+  visibleDays, isTwoDays, todayStr, mytNow, meds, events, agenda, completionKeys,
 }: {
   visibleDays: Date[];
   isTwoDays: boolean;
@@ -128,6 +257,7 @@ function TimelineView({
   meds: Medication[];
   events: CareEvent[];
   agenda: AgendaItem[];
+  completionKeys?: Set<string>;
 }) {
   const nowTop      = mytNow.getHours() * PX + (mytNow.getMinutes() * PX) / 60;
   const todayVisible = visibleDays.some((d) => toDateStr(d) === todayStr);
@@ -291,7 +421,7 @@ function TimelineView({
           {visibleDays.map((d) => {
             const ds = toDateStr(d);
             const isToday = ds === todayStr;
-            const dayEvs = buildDay(ds, meds, events, agenda);
+            const dayEvs = buildDay(ds, meds, events, agenda, completionKeys);
 
             return (
               <div
@@ -333,25 +463,38 @@ function TimelineView({
                   </div>
                 )}
 
-                {dayEvs.map((ev) => {
+                {layoutEvents(dayEvs).map((ev) => {
                   const top = toTop(ev.startTime);
-                  const [eh, em] = ev.endTime.split(":").map(Number);
-                  const [sh, sm] = ev.startTime.split(":").map(Number);
-                  const rawH = ((eh * 60 + em) - (sh * 60 + sm)) * PX / 60;
+                  const rawH = (timeToMin(ev.endTime) - timeToMin(ev.startTime)) * PX / 60;
                   const h = Math.max(20, Math.min(rawH, totalH - top));
+                  const style = ev.overlapping ? OVERLAP_STYLE : ev;
+                  const colW = 100 / ev.numCols;
+                  const left = `calc(${ev.col * colW}% + 2px)`;
+                  const width = `calc(${colW}% - 4px)`;
                   return (
                     <div
                       key={ev.id}
-                      className={`absolute left-1 right-1 z-[25] overflow-hidden rounded-md border-l-[3px] px-2 shadow-sm ${ev.bg} ${ev.border}`}
-                      style={{ top, height: h }}
+                      className={`absolute z-[25] overflow-hidden rounded-md border-l-[3px] px-2 shadow-sm ${style.bg} ${style.border}`}
+                      style={{ top, height: h, left, width }}
                     >
-                      <p className={`truncate pt-1 text-[10px] font-bold leading-tight ${ev.text}`}>
+                      <p className={`truncate pt-1 text-[10px] font-bold leading-tight ${style.text}`}>
                         {ev.title}
                       </p>
                       {h > 28 && (
                         <p className="mt-0.5 truncate text-[9px] text-gray-400">
                           {ev.startTime} – {ev.endTime}
                         </p>
+                      )}
+                      {ev.completed && (
+                        <div
+                          className="pointer-events-none absolute inset-x-0"
+                          style={{
+                            top: "50%",
+                            height: 1.5,
+                            backgroundColor: "#94a3b8",
+                            opacity: 0.7,
+                          }}
+                        />
                       )}
                     </div>
                   );
@@ -368,23 +511,22 @@ function TimelineView({
 // ─── Month View ───────────────────────────────────────────────────────────────
 
 function MonthView({
-  anchorDate, todayStr, meds, events, agenda,
+  anchorDate, todayStr, meds, events, agenda, completionKeys,
 }: {
   anchorDate: Date;
   todayStr: string;
   meds: Medication[];
   events: CareEvent[];
   agenda: AgendaItem[];
+  completionKeys?: Set<string>;
 }) {
   const year     = anchorDate.getFullYear();
   const month    = anchorDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const cells    = Array.from({ length: 42 }, (_, i) =>
     new Date(year, month, 1 - firstDay + i));
-  const VIEWPORT_HEIGHT = 400;
-
   return (
-    <div className="flex flex-col" style={{ height: VIEWPORT_HEIGHT }}>
+    <div className="flex flex-col" style={{ height: TIMELINE_VIEWPORT_PX + TIMELINE_HEADER_RESERVE_PX }}>
       {/* Weekday header */}
       <div
         className="grid grid-cols-7 bg-gray-50 shrink-0"
@@ -407,8 +549,8 @@ function MonthView({
           const ds            = toDateStr(d);
           const isCurrentMonth = d.getMonth() === month;
           const isToday       = ds === todayStr;
-          const dayEvs        = buildDay(ds, meds, events, agenda);
-          const extra         = dayEvs.length - 3;
+          const dayLayout     = layoutEvents(buildDay(ds, meds, events, agenda, completionKeys));
+          const extra         = dayLayout.length - 3;
 
           return (
             <div
@@ -433,14 +575,28 @@ function MonthView({
                 {d.getDate()}
               </span>
               <div className="space-y-0.5">
-                {dayEvs.slice(0, 3).map((ev) => (
-                  <div
-                    key={ev.id}
-                    className={`truncate text-[9px] font-semibold px-1 py-px rounded ${ev.bg} ${ev.border} border-l-2 ${ev.text}`}
-                  >
-                    {ev.title}
-                  </div>
-                ))}
+                {dayLayout.slice(0, 3).map((ev) => {
+                  const style = ev.overlapping ? OVERLAP_STYLE : ev;
+                  return (
+                    <div
+                      key={ev.id}
+                      className={`relative truncate text-[9px] font-semibold px-1 py-px rounded ${style.bg} ${style.border} border-l-2 ${style.text}`}
+                    >
+                      {ev.title}
+                      {ev.completed && (
+                        <div
+                          className="pointer-events-none absolute inset-x-0"
+                          style={{
+                            top: "50%",
+                            height: 1,
+                            backgroundColor: "#94a3b8",
+                            opacity: 0.7,
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
                 {extra > 0 && (
                   <p className="text-[9px] text-gray-400 font-semibold pl-0.5">+{extra} more</p>
                 )}
@@ -461,7 +617,7 @@ const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
   { value: "month",   label: "Month"    },
 ];
 
-export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
+export function CalendarWidget({ meds, events, agenda, completionKeys }: CalendarWidgetProps) {
   const [view,       setView]       = useState<CalendarView>("twoDays");
   const [anchorDate, setAnchorDate] = useState<Date>(() => getMYTToday());
   const [mytNow,     setMytNow]     = useState<Date>(() => getMYTNow());
@@ -628,6 +784,7 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
           meds={meds}
           events={events}
           agenda={agenda}
+          completionKeys={completionKeys}
         />
       )}
       {view === "month" && (
@@ -637,6 +794,7 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
           meds={meds}
           events={events}
           agenda={agenda}
+          completionKeys={completionKeys}
         />
       )}
     </div>
