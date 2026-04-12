@@ -34,7 +34,7 @@ export const AppLayout = () => {
   const navLinks = [
     { name: "Home", path: "/home" },
     { name: "Guide", path: "/guide" },
-    { name: "Parkins Details", path: "/perkins-details" },
+    { name: "Knowledge Hub", path: "/knowledge-hub" },
     { name: "Care Events", path: "/care-events" },
     { name: "Digital Records", path: "/digital-records" },
   ];

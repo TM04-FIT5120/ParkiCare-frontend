@@ -12,7 +12,8 @@ import {
   Heart,
   Stethoscope,
   Video,
-  X
+  X,
+  MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
@@ -346,8 +347,8 @@ export function DashboardPage() {
           {/* Upcoming Plans */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)]">
             <h3 className="text-lg font-bold text-[#2B3674] mb-4 flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-[#4318FF]" />
-              Upcoming Plans
+              <MapPin className="w-5 h-5 text-[#4318FF]" />
+              Add Outdoor Event
             </h3>
             <div className="flex flex-col sm:flex-row gap-4">
               {patientPlans.map((plan, index) => (

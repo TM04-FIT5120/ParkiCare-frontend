@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Medication, CareEvent } from "@/context/careEventsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,7 +63,15 @@ function formatNowLabel(d: Date): string {
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_ABBR    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const PX          = 56; // px per hour
-const GUTTER      = 52; // gutter width px
+/** Wider gutter so time labels never sit flush against the card edge */
+const GUTTER      = 76;
+/** Explicit grid line color (inline styles — always visible, avoids Tailwind/flex quirks) */
+const GRID_LINE   = "#e8eaee";
+
+const TIMELINE_VIEWPORT_PX = 400;
+/** Reserve space for sticky day header inside the scroll area (py-3 + labels) */
+const TIMELINE_HEADER_RESERVE_PX = 88;
+const NOW_LINE_COLOR = "#ef4444";
 
 // ─── Event Builder ────────────────────────────────────────────────────────────
 
@@ -124,39 +132,91 @@ function TimelineView({
   const nowTop      = mytNow.getHours() * PX + (mytNow.getMinutes() * PX) / 60;
   const todayVisible = visibleDays.some((d) => toDateStr(d) === todayStr);
   const totalH      = 24 * PX;
+  const nDays       = visibleDays.length;
+  const gridCols    = `${GUTTER}px repeat(${nDays}, minmax(0, 1fr))`;
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const visibleKey    = visibleDays.map((d) => toDateStr(d)).join("|");
+
+  /** Scroll so the current-time row is in view (default focus on “now”). */
+  useLayoutEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root || !todayVisible) return;
+    const headerEl = root.firstElementChild as HTMLElement | undefined;
+    const headerH =
+      headerEl?.offsetHeight ?? TIMELINE_HEADER_RESERVE_PX;
+    const lineFromContentTop = headerH + nowTop;
+    const ch = root.clientHeight;
+    const maxScroll = Math.max(0, root.scrollHeight - ch);
+    const target =
+      lineFromContentTop - ch * 0.35;
+    root.scrollTop = Math.max(0, Math.min(target, maxScroll));
+    // Omit ticking deps (mytNow / nowTop) so scroll does not jump every minute;
+    // re-run when the visible day range changes or today enters view.
+  }, [todayVisible, visibleKey]);
 
   return (
-    <div className="flex flex-col">
-
-      {/* ── Day header ── */}
-      <div className="flex bg-gray-50 border-b border-gray-300 shrink-0">
-        {/* gutter placeholder */}
-        <div className="shrink-0 border-r border-gray-300" style={{ width: GUTTER }} />
-
-        {visibleDays.map((d, idx) => {
-          const ds      = toDateStr(d);
+    <div
+      ref={scrollRootRef}
+      className="min-w-0 overflow-x-hidden overflow-y-auto"
+      style={{
+        maxHeight: TIMELINE_VIEWPORT_PX + TIMELINE_HEADER_RESERVE_PX,
+        scrollbarGutter: "stable",
+      }}
+    >
+      {/*
+        Single scroll container + sticky header so column widths match the body
+        (avoids scrollbar shrinking only the grid and misaligning the date row).
+      */}
+      <div
+        className="sticky top-0 z-40 grid min-w-0 bg-gray-50 shadow-[0_1px_0_0_rgba(15,23,42,0.08)]"
+        style={{
+          gridTemplateColumns: gridCols,
+          borderBottom: `1px solid ${GRID_LINE}`,
+          zIndex: 40,
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            boxSizing: "border-box",
+            borderRight: `1px solid ${GRID_LINE}`,
+            backgroundColor: "#f8fafc",
+          }}
+        />
+        {visibleDays.map((d) => {
+          const ds = toDateStr(d);
           const isToday = ds === todayStr;
-          const borderL = idx > 0 ? "border-l border-gray-300" : "";
-
           return (
             <div
-              key={ds}
-              className={`flex-1 flex flex-col items-center justify-center py-3 ${borderL} ${
-                isToday ? "bg-red-50/60" : ""
-              }`}
+              key={`h-${ds}`}
+              className="flex min-w-0 flex-col items-center justify-center py-3"
+              style={{
+                borderRight: `1px solid ${GRID_LINE}`,
+                backgroundColor: isToday ? "#fff1f2" : "#f8fafc",
+              }}
             >
               {isTwoDays ? (
-                <span className={`text-[13px] font-semibold tracking-tight ${isToday ? "text-red-500" : "text-slate-600"}`}>
+                <span
+                  className={`text-[13px] font-semibold tracking-tight ${
+                    isToday ? "text-red-500" : "text-slate-600"
+                  }`}
+                >
                   {DAY_ABBR[d.getDay()]} — {d.getDate()} {MONTH_NAMES[d.getMonth()].slice(0, 3)}
                 </span>
               ) : (
                 <>
-                  <span className={`text-[10px] font-semibold uppercase tracking-widest ${isToday ? "text-red-400" : "text-gray-400"}`}>
+                  <span
+                    className={`text-[10px] font-semibold uppercase tracking-widest ${
+                      isToday ? "text-red-400" : "text-gray-400"
+                    }`}
+                  >
                     {DAY_ABBR[d.getDay()]}
                   </span>
-                  <span className={`mt-0.5 text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${
-                    isToday ? "bg-red-500 text-white" : "text-slate-700"
-                  }`}>
+                  <span
+                    className={`mt-0.5 text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${
+                      isToday ? "bg-red-500 text-white" : "text-slate-700"
+                    }`}
+                  >
                     {d.getDate()}
                   </span>
                 </>
@@ -166,46 +226,79 @@ function TimelineView({
         })}
       </div>
 
-      {/* ── Scrollable body ── */}
-      <div className="overflow-y-auto" style={{ height: 400 }}>
-        <div className="flex" style={{ height: totalH }}>
-
-          {/* Time gutter */}
-          <div className="shrink-0 relative border-r border-gray-300 bg-white" style={{ width: GUTTER }}>
-            {Array.from({ length: 24 }, (_, i) => (
-              <div key={i} className="flex items-start justify-end pr-2.5" style={{ height: PX }}>
-                <span className="text-[10px] font-medium text-gray-400 -mt-[6px] select-none leading-none whitespace-nowrap">
-                  {formatHour12(i)}
-                </span>
-              </div>
-            ))}
-
-            {/* Current time label */}
-            {todayVisible && (
-              <div
-                className="absolute inset-x-0 flex justify-end pr-1 z-30 pointer-events-none"
-                style={{ top: nowTop - 9 }}
+      <div
+        className="grid min-w-0 bg-white"
+        style={{
+          gridTemplateColumns: gridCols,
+          height: totalH,
+        }}
+      >
+        {/* Time gutter */}
+        <div
+          className="relative min-w-0 bg-white"
+          style={{
+            boxSizing: "border-box",
+            borderRight: `1px solid ${GRID_LINE}`,
+            paddingLeft: 12,
+            paddingRight: 6,
+          }}
+        >
+          {Array.from({ length: 24 }, (_, i) => (
+            <div
+              key={i}
+              className="flex items-start justify-start"
+              style={{ height: PX, boxSizing: "border-box" }}
+            >
+              <span
+                className="select-none leading-none whitespace-nowrap"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 500,
+                  color: "#94a3b8",
+                  marginTop: -6,
+                }}
               >
-                <span className="bg-red-500 text-white text-[9px] font-bold rounded px-1.5 py-[3px] leading-none shadow-sm">
-                  {formatNowLabel(mytNow)}
-                </span>
-              </div>
-            )}
-          </div>
+                {formatHour12(i)}
+              </span>
+            </div>
+          ))}
 
-          {/* Day columns */}
-          {visibleDays.map((d, idx) => {
-            const ds      = toDateStr(d);
+          {todayVisible && (
+            <div
+              className="pointer-events-none absolute inset-x-0 z-20 flex justify-end pr-1"
+              style={{ top: nowTop - 9 }}
+            >
+              <span
+                className="rounded px-1.5 py-[3px] text-[9px] font-bold leading-none text-white shadow-sm"
+                style={{ backgroundColor: NOW_LINE_COLOR }}
+              >
+                {formatNowLabel(mytNow)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* All day columns: nested grid + one full-width "now" line */}
+        <div
+          className="relative min-h-0 min-w-0"
+          style={{
+            gridColumn: "2 / -1",
+            display: "grid",
+            gridTemplateColumns: `repeat(${nDays}, minmax(0, 1fr))`,
+            height: totalH,
+          }}
+        >
+          {visibleDays.map((d) => {
+            const ds = toDateStr(d);
             const isToday = ds === todayStr;
-            const dayEvs  = buildDay(ds, meds, events, agenda);
-            const borderL = idx > 0 ? "border-l border-gray-300" : "";
+            const dayEvs = buildDay(ds, meds, events, agenda);
 
             return (
               <div
                 key={ds}
-                className={`flex-1 relative ${borderL} ${isToday ? "bg-red-50/20" : "bg-white"}`}
+                className={`relative min-w-0 ${isToday ? "bg-red-50/20" : "bg-white"}`}
+                style={{ borderRight: `1px solid ${GRID_LINE}` }}
               >
-                {/* Horizontal hour lines */}
                 {Array.from({ length: 24 }, (_, i) => (
                   <div
                     key={i}
@@ -214,35 +307,49 @@ function TimelineView({
                   />
                 ))}
 
-                {/* Current time line */}
                 {isToday && (
+                  /* Line is the positioned element; dot is an absolute child of it */
                   <div
-                    className="absolute inset-x-0 z-20 pointer-events-none flex items-center"
-                    style={{ top: nowTop }}
+                    className="pointer-events-none absolute z-30"
+                    style={{
+                      top: nowTop,
+                      left: 0,
+                      right: 0,
+                      height: 2,
+                      backgroundColor: NOW_LINE_COLOR,
+                    }}
                   >
-                    <div className="w-2 h-2 rounded-full bg-red-500 shrink-0 -ml-1 shadow-sm" />
-                    <div className="flex-1 h-[1.5px] bg-red-500" />
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: -4,
+                        top: -3.5,
+                        width: 9,
+                        height: 9,
+                        borderRadius: "50%",
+                        backgroundColor: NOW_LINE_COLOR,
+                      }}
+                    />
                   </div>
                 )}
 
-                {/* Events */}
                 {dayEvs.map((ev) => {
-                  const top   = toTop(ev.startTime);
+                  const top = toTop(ev.startTime);
                   const [eh, em] = ev.endTime.split(":").map(Number);
                   const [sh, sm] = ev.startTime.split(":").map(Number);
-                  const rawH  = ((eh * 60 + em) - (sh * 60 + sm)) * PX / 60;
-                  const h     = Math.max(20, Math.min(rawH, totalH - top));
+                  const rawH = ((eh * 60 + em) - (sh * 60 + sm)) * PX / 60;
+                  const h = Math.max(20, Math.min(rawH, totalH - top));
                   return (
                     <div
                       key={ev.id}
-                      className={`absolute left-1 right-1 ${ev.bg} ${ev.border} border-l-[3px] rounded-md px-2 overflow-hidden z-10 shadow-sm`}
+                      className={`absolute left-1 right-1 z-[25] overflow-hidden rounded-md border-l-[3px] px-2 shadow-sm ${ev.bg} ${ev.border}`}
                       style={{ top, height: h }}
                     >
-                      <p className={`text-[10px] font-bold leading-tight truncate pt-1 ${ev.text}`}>
+                      <p className={`truncate pt-1 text-[10px] font-bold leading-tight ${ev.text}`}>
                         {ev.title}
                       </p>
                       {h > 28 && (
-                        <p className="text-[9px] text-gray-400 truncate mt-0.5">
+                        <p className="mt-0.5 truncate text-[9px] text-gray-400">
                           {ev.startTime} – {ev.endTime}
                         </p>
                       )}
@@ -274,37 +381,48 @@ function MonthView({
   const firstDay = new Date(year, month, 1).getDay();
   const cells    = Array.from({ length: 42 }, (_, i) =>
     new Date(year, month, 1 - firstDay + i));
+  const VIEWPORT_HEIGHT = 400;
 
   return (
-    <div className="overflow-y-auto" style={{ maxHeight: 480 }}>
+    <div className="flex flex-col" style={{ height: VIEWPORT_HEIGHT }}>
       {/* Weekday header */}
-      <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-300 sticky top-0 z-10">
+      <div
+        className="grid grid-cols-7 bg-gray-50 shrink-0"
+        style={{ borderBottom: `1px solid ${GRID_LINE}` }}
+      >
         {DAY_ABBR.map((d) => (
-          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-2.5 uppercase tracking-wider border-r border-gray-200 last:border-r-0">
+          <div
+            key={d}
+            className="text-center text-[10px] font-semibold text-gray-400 py-2.5 uppercase tracking-wider min-w-0"
+            style={{ borderRight: `1px solid ${GRID_LINE}` }}
+          >
             {d}
           </div>
         ))}
       </div>
 
       {/* Date cells */}
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 grid-rows-6 flex-1">
         {cells.map((d, i) => {
           const ds            = toDateStr(d);
           const isCurrentMonth = d.getMonth() === month;
           const isToday       = ds === todayStr;
           const dayEvs        = buildDay(ds, meds, events, agenda);
           const extra         = dayEvs.length - 3;
-          const col           = i % 7;
 
           return (
             <div
               key={i}
-              className={`min-h-[80px] border-b border-r border-gray-200 p-1.5 ${
-                col === 6 ? "border-r-0" : ""
-              } ${isToday ? "bg-red-50" : !isCurrentMonth ? "bg-gray-50/70" : "bg-white"}`}
+              className={`h-full min-h-0 p-1.5 min-w-0 ${
+                isToday ? "bg-red-50" : !isCurrentMonth ? "bg-gray-50/70" : "bg-white"
+              }`}
+              style={{
+                borderRight: `1px solid ${GRID_LINE}`,
+                borderBottom: `1px solid ${GRID_LINE}`,
+              }}
             >
               <span
-                className={`text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full mb-1 ${
+                className={`text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full mb-1 ml-0.5 ${
                   isToday
                     ? "bg-red-500 text-white"
                     : isCurrentMonth
@@ -344,14 +462,33 @@ const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
 ];
 
 export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
-  const [view,       setView]       = useState<CalendarView>("week");
+  const [view,       setView]       = useState<CalendarView>("twoDays");
   const [anchorDate, setAnchorDate] = useState<Date>(() => getMYTToday());
   const [mytNow,     setMytNow]     = useState<Date>(() => getMYTNow());
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = setInterval(() => setMytNow(getMYTNow()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = viewMenuRef.current;
+      if (el && !el.contains(e.target as Node)) setViewMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setViewMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [viewMenuOpen]);
 
   const todayStr = toDateStr(getMYTToday());
 
@@ -367,7 +504,11 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
 
   const goToday = useCallback(() => setAnchorDate(getMYTToday()), []);
 
-  const switchView = (v: CalendarView) => { setView(v); setAnchorDate(getMYTToday()); };
+  const switchView = (v: CalendarView) => {
+    setView(v);
+    setAnchorDate(getMYTToday());
+    setViewMenuOpen(false);
+  };
 
   // Visible days for timeline
   const visibleDays: Date[] = (() => {
@@ -400,18 +541,50 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-300 bg-white gap-3 flex-wrap shrink-0">
 
-        {/* View selector */}
-        <div className="relative">
-          <select
-            value={view}
-            onChange={(e) => switchView(e.target.value as CalendarView)}
-            className="appearance-none text-xs font-bold text-[#2B3674] bg-white border border-gray-300 rounded-lg pl-3 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30 cursor-pointer shadow-sm"
+        {/* View selector — custom menu so full trigger is clickable and list matches trigger width */}
+        <div ref={viewMenuRef} className="relative min-w-[11rem] shrink-0">
+          <button
+            type="button"
+            id="calendar-view-trigger"
+            aria-haspopup="listbox"
+            aria-expanded={viewMenuOpen}
+            aria-controls="calendar-view-listbox"
+            onClick={() => setViewMenuOpen((o) => !o)}
+            className="flex w-full items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-left shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30"
           >
-            {VIEW_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 rotate-90 pointer-events-none" />
+            <span className="text-xs font-bold text-[#2B3674]">
+              {VIEW_OPTIONS.find((o) => o.value === view)?.label ?? "Two Days"}
+            </span>
+            <ChevronDown
+              className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${viewMenuOpen ? "rotate-180" : ""}`}
+              aria-hidden
+            />
+          </button>
+          {viewMenuOpen && (
+            <div
+              id="calendar-view-listbox"
+              role="listbox"
+              aria-labelledby="calendar-view-trigger"
+              className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-gray-300 bg-white py-1 shadow-lg"
+            >
+              {VIEW_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={view === o.value}
+                  onClick={() => switchView(o.value)}
+                  className={`w-full px-3 py-2 text-left text-xs font-bold transition-colors ${
+                    view === o.value
+                      ? "bg-[#4318FF] text-white"
+                      : "text-[#2B3674] hover:bg-[#F4F7FE]"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -421,7 +594,7 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
             onClick={() => nav(-1)}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
           >
-            <ChevronLeft className="w-4 h-4 text-slate-600" />
+            <ChevronLeft className="w-5 h-5 text-slate-600" />
           </button>
           <span className="text-[13px] font-bold text-slate-700 min-w-[170px] text-center select-none">
             {headerLabel}
@@ -431,7 +604,7 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
             onClick={() => nav(1)}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
           >
-            <ChevronRight className="w-4 h-4 text-slate-600" />
+            <ChevronRight className="w-5 h-5 text-slate-600" />
           </button>
         </div>
 
@@ -439,7 +612,7 @@ export function CalendarWidget({ meds, events, agenda }: CalendarWidgetProps) {
         <button
           type="button"
           onClick={goToday}
-          className="text-xs font-bold text-[#4318FF] bg-[#EEF2FF] border border-[#c7d2fe] px-3 py-1.5 rounded-lg hover:bg-[#e0e7ff] transition-colors shadow-sm"
+          className="text-xs font-bold text-[#4318FF] bg-[#EEF2FF] border border-[#c7d2fe] px-5 py-1.5 rounded-lg hover:bg-[#e0e7ff] transition-colors shadow-sm"
         >
           Today
         </button>
