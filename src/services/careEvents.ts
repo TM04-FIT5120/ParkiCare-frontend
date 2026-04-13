@@ -85,6 +85,10 @@ export const careEventsService = {
     await api.patch(`/reminder/confirm/${remindId}?caregiverId=${caregiverId}`);
   },
 
+  deleteMedication: async (remindId: number, caregiverId: number): Promise<void> => {
+    await api.delete(`/reminder/${remindId}?caregiverId=${caregiverId}`);
+  },
+
   snoozeMedication: async (remindId: number, caregiverId: number): Promise<void> => {
     await api.patch(`/reminder/later/${remindId}?caregiverId=${caregiverId}`);
   },

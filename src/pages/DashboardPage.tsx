@@ -11,10 +11,12 @@ import {
   Activity,
   Heart,
   X,
-  MapPin
+  MapPin,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
+import { careEventsService } from "@/services/careEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
 import {
   listCaregiverEventOccurrences,
@@ -70,7 +72,7 @@ type DashboardScheduleRow = {
 };
 
 export function DashboardPage() {
-  const { meds: patientMedications, events: patientEventsStore } = useCareEvents();
+  const { meds: patientMedications, events: patientEventsStore, deleteMed, deleteEvent } = useCareEvents();
   const navigate = useNavigate();
   const { user } = useAuth();
   const caregiverId = user?.caregiverId ?? 0;
@@ -250,6 +252,30 @@ export function DashboardPage() {
     setConfirmMode(null);
   };
 
+  const handleDeleteItem = useCallback(async (item: DashboardScheduleRow) => {
+    if (!caregiverId) return;
+    try {
+      if (item.source === "caregiver") {
+        await caregiverScheduleService.deleteSchedule(item.sourceId, caregiverId);
+        setAgenda((prev) => prev.filter((a) => a.id !== item.sourceId));
+      } else if (item.source === "medication") {
+        await careEventsService.deleteMedication(item.sourceId, caregiverId);
+        deleteMed(item.sourceId);
+      } else if (item.source === "home") {
+        await careEventsService.deleteHomeCare(item.sourceId, caregiverId);
+        const ev = patientEventsStore.find((e) => (e.backendId ?? e.id) === item.sourceId);
+        if (ev) deleteEvent(ev.id);
+      } else if (item.source === "outdoor") {
+        await careEventsService.deleteOutdoor(item.sourceId, caregiverId);
+        const ev = patientEventsStore.find((e) => (e.backendId != null ? e.backendId : e.id > 100_000 ? e.id - 100_000 : e.id) === item.sourceId);
+        if (ev) deleteEvent(ev.id);
+      }
+      toast.success("Event deleted");
+    } catch {
+      toast.error("Could not delete event");
+    }
+  }, [caregiverId, patientEventsStore, deleteMed, deleteEvent]);
+
   const viewDay = getMYTDateString();
 
   const caregiverSchedule = useMemo((): DashboardScheduleRow[] => {
@@ -395,48 +421,59 @@ export function DashboardPage() {
                       ? { label: "Care", cls: "text-orange-600 bg-orange-50" }
                       : null;
 
-                    const rowClasses = `flex items-center gap-4 p-4 rounded-[20px] transition-all w-full text-left cursor-pointer group ${
+                    const rowClasses = `flex items-center gap-4 p-4 pr-12 rounded-[20px] transition-all w-full text-left cursor-pointer ${
                       item.completed
                         ? "bg-[#F4F7FE]"
                         : "bg-white border border-[#E0E5F2] hover:border-[#4318FF]/30 hover:shadow-md hover:-translate-y-0.5"
                     }`;
 
                     return (
-                      <button
-                        key={item.rowKey}
-                        type="button"
-                        onClick={() => handleTaskClick(item)}
-                        className={rowClasses}
-                      >
-                        <div className="shrink-0 w-9 h-9 rounded-xl bg-[#F4F7FE] flex items-center justify-center">
-                          {item.completed
-                            ? <CheckCircle2 className="w-5 h-5 text-[#4318FF]" />
-                            : isCaregiver
-                            ? <Circle className="w-4 h-4 text-[#A3AED0] group-hover:text-[#4318FF] transition-colors" />
-                            : sourceIcon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`font-bold text-[15px] truncate ${item.completed ? "text-[#A3AED0] line-through" : "text-[#2B3674]"}`}>
-                            {item.title}
-                          </h4>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <p className="text-xs font-bold text-[#A3AED0] flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 shrink-0" />
-                              {item.time}
-                            </p>
-                            {item.completed && (
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-[#4318FF] bg-[#E9E3FF] px-2 py-0.5 rounded-md">
-                                Completed
-                              </span>
-                            )}
+                      <div key={item.rowKey} className="relative group">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleTaskClick(item)}
+                          onKeyDown={(e) => e.key === "Enter" && handleTaskClick(item)}
+                          className={rowClasses}
+                        >
+                          <div className="shrink-0 w-9 h-9 rounded-xl bg-[#F4F7FE] flex items-center justify-center">
+                            {item.completed
+                              ? <CheckCircle2 className="w-5 h-5 text-[#4318FF]" />
+                              : isCaregiver
+                              ? <Circle className="w-4 h-4 text-[#A3AED0] group-hover:text-[#4318FF] transition-colors" />
+                              : sourceIcon}
                           </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-bold text-[15px] truncate ${item.completed ? "text-[#A3AED0] line-through" : "text-[#2B3674]"}`}>
+                              {item.title}
+                            </h4>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <p className="text-xs font-bold text-[#A3AED0] flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                                {item.time}
+                              </p>
+                              {item.completed && (
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-[#4318FF] bg-[#E9E3FF] px-2 py-0.5 rounded-md">
+                                  Completed
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {sourceBadge && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${sourceBadge.cls}`}>
+                              {sourceBadge.label}
+                            </span>
+                          )}
                         </div>
-                        {sourceBadge && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${sourceBadge.cls}`}>
-                            {sourceBadge.label}
-                          </span>
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteItem(item); }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          aria-label="Delete event"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     );
                   })
                 )}

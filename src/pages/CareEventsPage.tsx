@@ -1063,7 +1063,7 @@ export function CareEventsPage() {
                         type="button"
                         onClick={async () => {
                           if (med.remindId) {
-                            try { await careEventsService.confirmMedication(med.remindId, caregiverId); } catch { /* ignore */ }
+                            try { await careEventsService.deleteMedication(med.remindId, caregiverId); } catch { /* ignore */ }
                           }
                           deleteMed(med.id);
                         }}
