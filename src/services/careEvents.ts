@@ -97,6 +97,7 @@ export const careEventsService = {
   // Home care
   createHomeCare: async (
     patientId: number,
+    caregiverId: number,
     homeCareTitle: string,
     startDatetime: string,
     endDatetime: string,
@@ -106,6 +107,7 @@ export const careEventsService = {
   ): Promise<HomeCareScheduleResponse> => {
     const res = await api.post<HomeCareScheduleResponse>("/homeCare", {
       patientId,
+      caregiverId,
       homeCareTitle,
       startDatetime,
       endDatetime,
@@ -150,6 +152,7 @@ export const careEventsService = {
   // Outdoor events
   createOutdoor: async (
     patientId: number,
+    caregiverId: number,
     outdoorTitle: string,
     startDatetime: string,
     endDatetime: string,
@@ -158,6 +161,7 @@ export const careEventsService = {
   ): Promise<OutdoorScheduleResponse> => {
     const res = await api.post<OutdoorScheduleResponse>("/outdoor", {
       patientId,
+      caregiverId,
       outdoorTitle,
       startDatetime,
       endDatetime,

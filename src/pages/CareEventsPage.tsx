@@ -317,6 +317,7 @@ export function CareEventsPage() {
       try {
         const created = await careEventsService.createHomeCare(
           patientId,
+          caregiverId,
           careEventTitle,
           startDatetime,
           endDatetimeFinal,
@@ -375,6 +376,7 @@ export function CareEventsPage() {
       try {
         const created = await careEventsService.createOutdoor(
           patientId,
+          caregiverId,
           outdoorEventTitle,
           startDatetime,
           endDatetimeFinal,
