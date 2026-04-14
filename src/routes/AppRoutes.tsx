@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { CareEventsPage } from "@/pages/CareEventsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
-import { DigitalRecordsPage } from "@/pages/DigitalRecordsPage";
+// import { DigitalRecordsPage } from "@/pages/DigitalRecordsPage";
 import { GuidePage } from "@/pages/GuidePage";
 import { LoadingScreenPage } from "@/pages/LoadingScreenPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -23,7 +23,7 @@ export const AppRoutes = () => (
       <Route path="/guide" element={<GuidePage />} />
       <Route path="/knowledge-hub" element={<PerkinsDetailsPage />} />
       <Route path="/care-events" element={<CareEventsPage />} />
-      <Route path="/digital-records" element={<DigitalRecordsPage />} />
+      {/* <Route path="/digital-records" element={<DigitalRecordsPage />} /> */}
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
