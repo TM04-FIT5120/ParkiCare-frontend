@@ -26,8 +26,10 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request)
       .then((response) => {
         // Cache a clone of successful responses for offline fallback.
+        // Clone BEFORE returning so both the cache and the browser get their own copy.
         if (response && response.status === 200) {
-          const cache = caches.open('parkicare-v1').then((c) => c.put(event.request, response.clone()));
+          const responseToCache = response.clone();
+          caches.open('parkicare-v1').then((c) => c.put(event.request, responseToCache));
         }
         return response;
       })
