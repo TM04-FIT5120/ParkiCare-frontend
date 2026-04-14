@@ -73,7 +73,7 @@ const DAY_ABBR    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const PX          = 56; // px per hour
 /** Wider gutter so time labels never sit flush against the card edge */
 const GUTTER      = 76;
-/** Explicit grid line color (inline styles — always visible, avoids Tailwind/flex quirks) */
+/** Explicit grid line color (inline styles: always visible, avoids Tailwind/flex quirks) */
 const GRID_LINE   = "#e8eaee";
 
 const TIMELINE_VIEWPORT_PX = 400;
@@ -331,7 +331,7 @@ function TimelineView({
                     isToday ? "text-red-500" : "text-slate-600"
                   }`}
                 >
-                  {DAY_ABBR[d.getDay()]} — {d.getDate()} {MONTH_NAMES[d.getMonth()].slice(0, 3)}
+                  {DAY_ABBR[d.getDay()]} - {d.getDate()} {MONTH_NAMES[d.getMonth()].slice(0, 3)}
                 </span>
               ) : (
                 <>
@@ -697,7 +697,7 @@ export function CalendarWidget({ meds, events, agenda, completionKeys }: Calenda
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-300 bg-white gap-3 flex-wrap shrink-0">
 
-        {/* View selector — custom menu so full trigger is clickable and list matches trigger width */}
+        {/* View selector, custom menu so full trigger is clickable and list matches trigger width */}
         <div ref={viewMenuRef} className="relative min-w-[11rem] shrink-0">
           <button
             type="button"

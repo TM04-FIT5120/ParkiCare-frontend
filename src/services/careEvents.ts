@@ -28,6 +28,7 @@ export interface HomeCareScheduleResponse {
   careNote: string;
   isUrgent: boolean;
   recurrence?: string;
+  isPinned?: number;
 }
 
 // --- Outdoor types ---
@@ -39,6 +40,7 @@ export interface OutdoorScheduleResponse {
   endDatetime: string;
   prepareNote: string;
   recurrence?: string;
+  isPinned?: number;
 }
 
 export const careEventsService = {
@@ -202,5 +204,15 @@ export const careEventsService = {
 
   deleteOutdoor: async (id: number, caregiverId: number): Promise<void> => {
     await api.delete(`/outdoor/${id}?caregiverId=${caregiverId}`);
+  },
+
+  toggleHomeCarePin: async (id: number, caregiverId: number): Promise<HomeCareScheduleResponse> => {
+    const res = await api.patch<HomeCareScheduleResponse>(`/homeCare/${id}/pin?caregiverId=${caregiverId}`);
+    return res.data;
+  },
+
+  toggleOutdoorPin: async (id: number, caregiverId: number): Promise<OutdoorScheduleResponse> => {
+    const res = await api.patch<OutdoorScheduleResponse>(`/outdoor/${id}/pin?caregiverId=${caregiverId}`);
+    return res.data;
   },
 };

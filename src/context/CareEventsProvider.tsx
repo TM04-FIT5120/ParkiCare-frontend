@@ -11,8 +11,9 @@ import { drugsService } from "@/services/drugs";
 import { useAuth } from "@/context/AuthContext";
 
 export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
-  const { patient } = useAuth();
+  const { patient, user } = useAuth();
   const patientId = patient?.patientId ?? null;
+  const caregiverId = user?.caregiverId ?? 0;
 
   const [loading, setLoading] = useState(false);
   const [meds, setMeds] = useState<Medication[]>(DEFAULT_MEDS);
@@ -56,6 +57,8 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
         startDatetime: h.startDatetime,
         endDatetime: h.endDatetime,
         recurrence: h.recurrence,
+        isPinned: h.isPinned ?? 0,
+        note: h.careNote,
       }));
 
       const mappedOutdoor: CareEvent[] = apiOutdoor.map((o) => ({
@@ -68,12 +71,14 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
         startDatetime: o.startDatetime,
         endDatetime: o.endDatetime,
         recurrence: o.recurrence,
+        isPinned: o.isPinned ?? 0,
+        note: o.prepareNote,
       }));
 
       setMeds(mappedMeds);
       setEvents([...mappedHome, ...mappedOutdoor]);
     } catch {
-      // Backend unreachable — keep current state
+      // Backend unreachable, keep current state
     } finally {
       setLoading(false);
     }
@@ -108,6 +113,34 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
     if (patientId) fetchFromApi(patientId);
   }, [patientId, fetchFromApi]);
 
+  const togglePin = useCallback(async (backendId: number, eventType: "home" | "outdoor") => {
+    if (!caregiverId) return;
+    // Optimistic update: flip isPinned immediately so the UI responds instantly
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.backendId === backendId && e.eventType === eventType
+          ? { ...e, isPinned: e.isPinned === 1 ? 0 : 1 }
+          : e
+      )
+    );
+    try {
+      if (eventType === "home") {
+        await careEventsService.toggleHomeCarePin(backendId, caregiverId);
+      } else {
+        await careEventsService.toggleOutdoorPin(backendId, caregiverId);
+      }
+    } catch {
+      // Revert on failure
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.backendId === backendId && e.eventType === eventType
+            ? { ...e, isPinned: e.isPinned === 1 ? 0 : 1 }
+            : e
+        )
+      );
+    }
+  }, [caregiverId]);
+
   const value = useMemo(
     () => ({
       patientId,
@@ -118,9 +151,10 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
       events,
       addEvent,
       deleteEvent,
+      togglePin,
       refresh,
     }),
-    [patientId, loading, meds, events, addMed, deleteMed, addEvent, deleteEvent, refresh],
+    [patientId, loading, meds, events, addMed, deleteMed, addEvent, deleteEvent, togglePin, refresh],
   );
 
   return (

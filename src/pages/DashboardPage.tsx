@@ -571,7 +571,7 @@ export function DashboardPage() {
                 {/* Event Time */}
                 <div>
                   <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                    Event Time — {formatDisplayTime(newEventTimeHour, newEventTimeMinute, newEventTimePeriod)}
+                    Event Time - {formatDisplayTime(newEventTimeHour, newEventTimeMinute, newEventTimePeriod)}
                   </label>
                   <div className="p-4 bg-white rounded-xl shadow-sm">
                     <div className="grid grid-cols-3 gap-2">
@@ -617,7 +617,7 @@ export function DashboardPage() {
                 {/* End Time */}
                 <div>
                   <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                    End Time — {formatDisplayTime(newEventEndTimeHour, newEventEndTimeMinute, newEventEndTimePeriod)}
+                    End Time - {formatDisplayTime(newEventEndTimeHour, newEventEndTimeMinute, newEventEndTimePeriod)}
                   </label>
                   <div className="p-4 bg-white rounded-xl shadow-sm">
                     <div className="grid grid-cols-3 gap-2">

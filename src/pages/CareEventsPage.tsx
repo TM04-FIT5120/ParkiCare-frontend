@@ -6,6 +6,8 @@ import { useCareEvents } from "@/hooks/useCareEvents";
 import { useAuth } from "@/context/AuthContext";
 import { drugsService, type DrugBase } from "@/services/drugs";
 import { careEventsService } from "@/services/careEvents";
+import { HistorySection } from "@/components/HistorySection";
+import type { CareEvent } from "@/context/careEventsContext";
 
 const CARE_EVENT_TYPES = ["Bathing", "Nursing Care", "Toileting Assist", "Meals", "Exercise", "Physical Therapy"];
 const OUTDOOR_EVENT_TYPES = ["Doctor Appointment", "Walk in Park", "Social Visit", "Shopping", "Recreation", "Family Outing"];
@@ -31,9 +33,13 @@ function formatDisplayTime(hour: string, minute: string, period: string): string
 }
 
 export function CareEventsPage() {
-  const { meds, addMed, deleteMed, events, addEvent, deleteEvent, patientId } = useCareEvents();
+  const { meds, addMed, deleteMed, events, addEvent, deleteEvent, togglePin, patientId } = useCareEvents();
   const { user } = useAuth();
   const caregiverId = user?.caregiverId ?? 0;
+
+  // Refs for scroll-to on reuse
+  const careEventFormRef = useRef<HTMLDivElement>(null);
+  const outdoorEventFormRef = useRef<HTMLDivElement>(null);
 
   // --- Medication state ---
   const [medName, setMedName] = useState("");
@@ -102,6 +108,33 @@ export function CareEventsPage() {
   // Separate events into care and outdoor
   const careEvents = events.filter(ev => CARE_EVENT_TYPES.includes(ev.type) || ev.eventType === "home");
   const outdoorEvents = events.filter(ev => OUTDOOR_EVENT_TYPES.includes(ev.type) || ev.eventType === "outdoor");
+
+  // Prefill form from a history item and scroll to it
+  const handleReuse = (event: CareEvent) => {
+    if (event.eventType === "home") {
+      setCareEventTitle(event.title);
+      if (event.type && event.type !== "Home Care") setCareEventType(event.type);
+      setCareEventStartDate(new Date().toISOString().slice(0, 10));
+      setCareEventIsNeverEnding(true);
+      setCareEventEndDate("");
+      setCareEventRecurrence("none");
+      setTimeout(() => {
+        careEventFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+      toast.success("Care event prefilled. Review and save.");
+    } else if (event.eventType === "outdoor") {
+      setOutdoorEventTitle(event.title);
+      if (event.type && event.type !== "Outdoor") setOutdoorEventType(event.type);
+      setOutdoorEventStartDate(new Date().toISOString().slice(0, 10));
+      setOutdoorEventIsNeverEnding(true);
+      setOutdoorEventEndDate("");
+      setOutdoorEventRecurrence("none");
+      setTimeout(() => {
+        outdoorEventFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+      toast.success("Outdoor event prefilled. Review and save.");
+    }
+  };
 
   // Debounced drug name search
   useEffect(() => {
@@ -256,7 +289,7 @@ export function CareEventsPage() {
 
   const handleNextStep = () => {
     if (medicationStep === 1) {
-      // Image upload is optional — always allow proceeding
+      // Image upload is optional. Always allow proceeding
     }
     if (medicationStep === 2 && !medName.trim()) {
       toast.error("Please enter medication name");
@@ -540,7 +573,7 @@ export function CareEventsPage() {
                         <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
                         <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
                           {selectedDrug
-                            ? `Selected: ${selectedDrug.drugName} — suggested dose: ${selectedDrug.dosage}`
+                            ? `Selected: ${selectedDrug.drugName} - suggested dose: ${selectedDrug.dosage}`
                             : "Type to search medications from the database."}
                         </p>
                       </div>
@@ -641,14 +674,14 @@ export function CareEventsPage() {
                         onClick={() => setDosagePart("oral")}
                         className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "oral" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
                       >
-                        Part 1 — Oral
+                        Part 1: Oral
                       </button>
                       <button
                         type="button"
                         onClick={() => setDosagePart("other")}
                         className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "other" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
                       >
-                        Part 2 — Other Route
+                        Part 2: Other Route
                       </button>
                     </div>
 
@@ -847,7 +880,7 @@ export function CareEventsPage() {
                       <div className="space-y-4">
                         {medTimes.map((t, idx) => (
                           <div key={idx} className="p-4 bg-[#F4F7FE] rounded-xl space-y-3">
-                            <p className="text-xs font-bold text-[#4318FF]">Dose {idx + 1} — {formatDisplayTime(t.hour, t.minute, t.period)}</p>
+                            <p className="text-xs font-bold text-[#4318FF]">Dose {idx + 1} - {formatDisplayTime(t.hour, t.minute, t.period)}</p>
                             <div className="grid grid-cols-3 gap-2">
                               {/* Hour */}
                               <div>
@@ -955,7 +988,7 @@ export function CareEventsPage() {
                         <div>
                           <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Dosage</p>
                           {dosagePart === "oral" ? (
-                            <p className="text-sm font-bold text-[#2B3674]">{dose || "—"} × {quantity !== "" ? quantity : "—"} unit(s)</p>
+                            <p className="text-sm font-bold text-[#2B3674]">{dose || "-"} × {quantity !== "" ? quantity : "-"} unit(s)</p>
                           ) : (
                             <p className="text-sm font-bold text-[#2B3674]">{intakeMethod || "Not set"}</p>
                           )}
@@ -970,7 +1003,7 @@ export function CareEventsPage() {
                         <div>
                           <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Schedule</p>
                           <p className="text-sm font-bold text-[#2B3674]">
-                            From {startDate} {isNeverEnding ? "— ongoing" : endDate ? `to ${endDate}` : ""}
+                            From {startDate} {isNeverEnding ? "- ongoing" : endDate ? `to ${endDate}` : ""}
                           </p>
                           <p className="text-xs text-[#A3AED0] mt-0.5 capitalize">
                             {recurrence === "none" ? "No repeat" : recurrence === "weekly" ? `Weekly on ${getDayName(startDate)}` : recurrence}
@@ -985,7 +1018,7 @@ export function CareEventsPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Frequency</p>
-                          <p className="text-sm font-bold text-[#2B3674]">{frequency} — {mealTiming}</p>
+                          <p className="text-sm font-bold text-[#2B3674]">{frequency} - {mealTiming}</p>
                         </div>
                         <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
                       </div>
@@ -1080,11 +1113,18 @@ export function CareEventsPage() {
 
         </div>
 
+        {/* History Section */}
+        <HistorySection
+          events={events}
+          onTogglePin={togglePin}
+          onReuse={handleReuse}
+        />
+
         {/* Care Events Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Care Event Form */}
-          <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
+          <div ref={careEventFormRef} className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
             <h2 className="text-xl font-bold text-[#2B3674] mb-6 flex items-center gap-2">
               <Plus className="w-5 h-5 text-orange-500" /> Add Care Event
             </h2>
@@ -1134,7 +1174,7 @@ export function CareEventsPage() {
                         onClick={() => { setCareEventType(""); setShowCareTypeDropdown(false); }}
                         className="px-4 py-2 mt-1 border-t border-slate-100 hover:bg-orange-50 rounded-lg cursor-pointer text-sm font-semibold text-orange-500 hover:text-orange-700"
                       >
-                        ✏ Custom — type your own
+                        ✏ Custom: type your own
                       </div>
                     </motion.div>
                   )}
@@ -1213,7 +1253,7 @@ export function CareEventsPage() {
               {/* Event Time */}
               <div>
                 <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                  Event Time — {formatDisplayTime(careEventTimeHour, careEventTimeMinute, careEventTimePeriod)}
+                  Event Time - {formatDisplayTime(careEventTimeHour, careEventTimeMinute, careEventTimePeriod)}
                 </label>
                 <div className="p-4 bg-[#F4F7FE] rounded-xl">
                   <div className="grid grid-cols-3 gap-2">
@@ -1259,7 +1299,7 @@ export function CareEventsPage() {
               {/* End Time */}
               <div>
                 <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                  End Time — {formatDisplayTime(careEventEndTimeHour, careEventEndTimeMinute, careEventEndTimePeriod)}
+                  End Time - {formatDisplayTime(careEventEndTimeHour, careEventEndTimeMinute, careEventEndTimePeriod)}
                 </label>
                 <div className="p-4 bg-[#F4F7FE] rounded-xl">
                   <div className="grid grid-cols-3 gap-2">
@@ -1370,7 +1410,7 @@ export function CareEventsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Outdoor Event Form */}
-          <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
+          <div ref={outdoorEventFormRef} className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
             <h2 className="text-xl font-bold text-[#2B3674] mb-6 flex items-center gap-2">
               <Plus className="w-5 h-5 text-green-500" /> Add Outdoor Event
             </h2>
@@ -1420,7 +1460,7 @@ export function CareEventsPage() {
                         onClick={() => { setOutdoorEventType(""); setShowOutdoorTypeDropdown(false); }}
                         className="px-4 py-2 mt-1 border-t border-slate-100 hover:bg-green-50 rounded-lg cursor-pointer text-sm font-semibold text-green-600 hover:text-green-700"
                       >
-                        ✏ Custom — type your own
+                        ✏ Custom: type your own
                       </div>
                     </motion.div>
                   )}
@@ -1499,7 +1539,7 @@ export function CareEventsPage() {
               {/* Event Time */}
               <div>
                 <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                  Event Time — {formatDisplayTime(outdoorEventTimeHour, outdoorEventTimeMinute, outdoorEventTimePeriod)}
+                  Event Time - {formatDisplayTime(outdoorEventTimeHour, outdoorEventTimeMinute, outdoorEventTimePeriod)}
                 </label>
                 <div className="p-4 bg-[#F4F7FE] rounded-xl">
                   <div className="grid grid-cols-3 gap-2">
@@ -1545,7 +1585,7 @@ export function CareEventsPage() {
               {/* End Time */}
               <div>
                 <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                  End Time — {formatDisplayTime(outdoorEventEndTimeHour, outdoorEventEndTimeMinute, outdoorEventEndTimePeriod)}
+                  End Time  {formatDisplayTime(outdoorEventEndTimeHour, outdoorEventEndTimeMinute, outdoorEventEndTimePeriod)}
                 </label>
                 <div className="p-4 bg-[#F4F7FE] rounded-xl">
                   <div className="grid grid-cols-3 gap-2">

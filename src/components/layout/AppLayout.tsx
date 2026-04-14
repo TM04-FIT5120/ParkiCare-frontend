@@ -6,6 +6,7 @@ import { User, Globe, ChevronDown, Check, Menu, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { Footer } from "@/components/layout/Footer";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -24,10 +25,11 @@ const LANGUAGES = [
 export const AppLayout = () => {
   const location = useLocation();
   const { user, patient } = useAuth();
+  usePushNotifications();
   const [currentLang, setCurrentLang] = useState(LANGUAGES[0]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const caregiverId = user?.caregiverId ?? "—";
+  const caregiverId = user?.caregiverId ?? "-";
   const caregiverNickname = user?.caregiverNickname ?? "Caregiver";
   const patientNickname = patient?.patientNickname ?? "Patient";
 

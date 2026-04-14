@@ -398,8 +398,8 @@ export function DigitalRecordsPage() {
                         <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.startDatetime.slice(0, 10)}</td>
                         <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.startDatetime.slice(11, 16)}</td>
                         <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.homeCareTitle}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">—</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.careNote || "—"}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">-</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.careNote || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -586,7 +586,7 @@ export function DigitalRecordsPage() {
                         <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.startDatetime.slice(0, 10)}</td>
                         <td className="p-3 sm:p-4 font-bold text-[#A3AED0]">{rec.startDatetime.slice(11, 16)}</td>
                         <td className="p-3 sm:p-4 font-bold text-[#4318FF]">{rec.outdoorTitle}</td>
-                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.prepareNote || "—"}</td>
+                        <td className="p-3 sm:p-4 font-bold text-[#2B3674]">{rec.prepareNote || "-"}</td>
                         <td className="p-3 sm:p-4">
                           <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-green-50 text-green-600">
                             Scheduled

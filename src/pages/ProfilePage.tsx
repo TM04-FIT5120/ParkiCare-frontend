@@ -11,15 +11,15 @@ export function ProfilePage() {
   const navigate = useNavigate();
   const { user, patient } = useAuth();
 
-  const caregiverId = user?.caregiverId ?? location.state?.caregiverId ?? "—";
-  const patientNickname = patient?.patientNickname ?? location.state?.patientNickname ?? "—";
-  const ageRange = patient?.patientAge ?? location.state?.ageRange ?? "—";
+  const loginId = user?.uniqueId ?? location.state?.uniqueId ?? "-";
+  const patientNickname = patient?.patientNickname ?? location.state?.patientNickname ?? "-";
+  const ageRange = patient?.patientAge ?? location.state?.ageRange ?? "-";
 
   const [copied, setCopied] = useState(false);
 
   const handleCopyId = async () => {
     try {
-      await navigator.clipboard.writeText(caregiverId);
+      await navigator.clipboard.writeText(String(loginId));
       setCopied(true);
       toast.success("User ID copied to clipboard!");
       setTimeout(() => setCopied(false), 2000);
@@ -27,7 +27,7 @@ export function ProfilePage() {
       // Fallback for environments where clipboard API is blocked
       try {
         const textArea = document.createElement("textarea");
-        textArea.value = caregiverId;
+        textArea.value = String(loginId);
         textArea.style.position = "fixed";
         textArea.style.left = "-999999px";
         textArea.style.top = "-999999px";
@@ -136,7 +136,7 @@ export function ProfilePage() {
                 </div>
                 <h3 className="text-sm font-bold text-[#A3AED0] uppercase tracking-wider mb-2">Login User ID</h3>
                 <div className="flex items-center gap-3">
-                  <span className="text-3xl sm:text-4xl font-extrabold text-[#8B5CF6] tracking-tight drop-shadow-sm">{caregiverId}</span>
+                  <span className="text-3xl sm:text-4xl font-extrabold text-[#8B5CF6] tracking-tight drop-shadow-sm">{loginId}</span>
                 </div>
                 <button 
                   onClick={handleCopyId}
