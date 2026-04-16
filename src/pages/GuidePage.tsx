@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { UserPlus, LayoutDashboard, Bell, Pill, BookOpen, Heart, MapPin, FileText } from "lucide-react";
+import { UserPlus, LayoutDashboard, Bell, Pill, BookOpen, Heart, MapPin } from "lucide-react";
 
 interface GuideStep {
   text: string;
