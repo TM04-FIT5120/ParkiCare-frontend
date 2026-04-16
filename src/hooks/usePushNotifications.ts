@@ -32,7 +32,7 @@ function normalizeAlert(input: any): MedicationAlert | null {
   const body = input?.body ?? input?.data?.body ?? input?.notification?.body ?? 'Medication reminder.';
 
   if (!remindId || !caregiverId) {
-    console.warn('[PushNotifications] normalizeAlert returned null — missing remindId or caregiverId.', { remindId, caregiverId });
+    console.warn('[PushNotifications] normalizeAlert returned null - missing remindId or caregiverId.', { remindId, caregiverId });
     return null;
   }
 
@@ -104,7 +104,7 @@ export function usePushNotifications() {
       try {
         console.log('[PushNotifications] Starting registration. Permission:', Notification.permission);
         if (Notification.permission === 'denied') {
-          console.warn('[PushNotifications] Permission denied — aborting registration.');
+          console.warn('[PushNotifications] Permission denied - aborting registration.');
           return;
         }
         const permission =
@@ -127,7 +127,7 @@ export function usePushNotifications() {
 
         const cachedToken = localStorage.getItem(storageKey);
         if (cachedToken === token) {
-          console.log('[PushNotifications] Token unchanged — skipping registerPushToken API call.');
+          console.log('[PushNotifications] Token unchanged - skipping registerPushToken API call.');
           return;
         }
 
@@ -151,7 +151,7 @@ export function usePushNotifications() {
     const replayStoredAlert = (source: string) => {
       console.log('[PushNotifications] replayStoredAlert triggered from:', source);
       const pending = consumeStoredAlert();
-      console.log('[PushNotifications] replayStoredAlert — stored alert:', pending ? JSON.stringify(pending) : 'none');
+      console.log('[PushNotifications] replayStoredAlert - stored alert:', pending ? JSON.stringify(pending) : 'none');
       if (pending) dispatchAlert(pending);
     };
 
@@ -181,9 +181,9 @@ export function usePushNotifications() {
         });
 
         if (!alert) {
-          console.log('[PushNotifications] onMessage — FCM data missing, fetching pending reminders from API...');
+          console.log('[PushNotifications] onMessage - FCM data missing, fetching pending reminders from API...');
           const pending = await fetchPendingRemindersForCaregiver(caregiverId);
-          console.log('[PushNotifications] onMessage — API returned', pending.length, 'pending reminder(s):', JSON.stringify(pending));
+          console.log('[PushNotifications] onMessage - API returned', pending.length, 'pending reminder(s):', JSON.stringify(pending));
           const first = pending[0];
           if (first) {
             alert = {
@@ -192,13 +192,13 @@ export function usePushNotifications() {
               title: payload.notification?.title ?? 'Medication Reminder',
               body: payload.notification?.body ?? 'Time to take medication.',
             };
-            console.log('[PushNotifications] onMessage — built alert from API:', JSON.stringify(alert));
+            console.log('[PushNotifications] onMessage - built alert from API:', JSON.stringify(alert));
           } else {
-            console.warn('[PushNotifications] onMessage — no pending reminders found, cannot show in-app alert.');
+            console.warn('[PushNotifications] onMessage - no pending reminders found, cannot show in-app alert.');
           }
         }
 
-        console.log('[PushNotifications] onMessage — final alert:', alert ? JSON.stringify(alert) : 'NULL');
+        console.log('[PushNotifications] onMessage - final alert:', alert ? JSON.stringify(alert) : 'NULL');
         if (alert) dispatchAndPersist(alert);
       } catch (err) {
         console.error('[PushNotifications] onMessage handler error:', err);
@@ -215,13 +215,13 @@ export function usePushNotifications() {
         const type = event.data?.type;
         if (type === 'MEDICATION_ALERT') {
           const alert = normalizeAlert(event.data);
-          console.log('[PushNotifications] BroadcastChannel — alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
+          console.log('[PushNotifications] BroadcastChannel - alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
           if (alert) dispatchAndPersist(alert);
         } else if (type === 'NOTIFICATION_RECEIVED') {
-          // FCM stripped data fields — fetch pending reminder from API.
-          console.log('[PushNotifications] BroadcastChannel — NOTIFICATION_RECEIVED, fetching from API...');
+          // FCM stripped data fields - fetch pending reminder from API.
+          console.log('[PushNotifications] BroadcastChannel - NOTIFICATION_RECEIVED, fetching from API...');
           fetchPendingRemindersForCaregiver(caregiverId).then((pending) => {
-            console.log('[PushNotifications] BroadcastChannel — API returned', pending.length, 'pending reminder(s)');
+            console.log('[PushNotifications] BroadcastChannel - API returned', pending.length, 'pending reminder(s)');
             const first = pending[0];
             if (first) {
               const alert: MedicationAlert = {
@@ -230,16 +230,16 @@ export function usePushNotifications() {
                 title: event.data.title ?? 'Medication Reminder',
                 body: event.data.body ?? 'Time to take medication.',
               };
-              console.log('[PushNotifications] BroadcastChannel — dispatching alert from API:', JSON.stringify(alert));
+              console.log('[PushNotifications] BroadcastChannel - dispatching alert from API:', JSON.stringify(alert));
               dispatchAndPersist(alert);
             } else {
-              console.warn('[PushNotifications] BroadcastChannel — no pending reminders found from API.');
+              console.warn('[PushNotifications] BroadcastChannel - no pending reminders found from API.');
             }
           }).catch((err) => {
-            console.error('[PushNotifications] BroadcastChannel — API fetch failed:', err);
+            console.error('[PushNotifications] BroadcastChannel - API fetch failed:', err);
           });
         } else {
-          console.warn('[PushNotifications] BroadcastChannel — unexpected type, ignoring:', type);
+          console.warn('[PushNotifications] BroadcastChannel - unexpected type, ignoring:', type);
         }
       };
     } catch (e) {
@@ -252,13 +252,13 @@ export function usePushNotifications() {
       const type = event.data?.type;
       if (type === 'MEDICATION_ALERT') {
         const alert = normalizeAlert(event.data);
-        console.log('[PushNotifications] serviceWorker.onmessage — alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
+        console.log('[PushNotifications] serviceWorker.onmessage - alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
         if (alert) dispatchAndPersist(alert);
       } else if (type === 'NOTIFICATION_RECEIVED') {
-        // FCM stripped data fields — fetch pending reminder from API.
-        console.log('[PushNotifications] serviceWorker.onmessage — NOTIFICATION_RECEIVED, fetching from API...');
+        // FCM stripped data fields - fetch pending reminder from API.
+        console.log('[PushNotifications] serviceWorker.onmessage - NOTIFICATION_RECEIVED, fetching from API...');
         fetchPendingRemindersForCaregiver(caregiverId).then((pending) => {
-          console.log('[PushNotifications] serviceWorker.onmessage — API returned', pending.length, 'pending reminder(s)');
+          console.log('[PushNotifications] serviceWorker.onmessage - API returned', pending.length, 'pending reminder(s)');
           const first = pending[0];
           if (first) {
             const alert: MedicationAlert = {
@@ -267,16 +267,16 @@ export function usePushNotifications() {
               title: event.data.title ?? 'Medication Reminder',
               body: event.data.body ?? 'Time to take medication.',
             };
-            console.log('[PushNotifications] serviceWorker.onmessage — dispatching alert from API:', JSON.stringify(alert));
+            console.log('[PushNotifications] serviceWorker.onmessage - dispatching alert from API:', JSON.stringify(alert));
             dispatchAndPersist(alert);
           } else {
-            console.warn('[PushNotifications] serviceWorker.onmessage — no pending reminders found from API.');
+            console.warn('[PushNotifications] serviceWorker.onmessage - no pending reminders found from API.');
           }
         }).catch((err) => {
-          console.error('[PushNotifications] serviceWorker.onmessage — API fetch failed:', err);
+          console.error('[PushNotifications] serviceWorker.onmessage - API fetch failed:', err);
         });
       } else {
-        console.warn('[PushNotifications] serviceWorker.onmessage — unexpected type, ignoring:', type);
+        console.warn('[PushNotifications] serviceWorker.onmessage - unexpected type, ignoring:', type);
       }
     };
 

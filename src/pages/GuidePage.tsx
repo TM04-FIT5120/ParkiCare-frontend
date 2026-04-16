@@ -30,7 +30,7 @@ const guideFeatures: GuideFeature[] = [
     route: "/home",
     accentColor: "bg-blue-50",
     iconColor: "text-blue-500",
-    images: [{ src: "/Guide/Picture1.png", alt: "Home dashboard — add medications, care tasks, and plans" }],
+    images: [{ src: "/Guide/Picture1.png", alt: "Home dashboard - add medications, care tasks, and plans" }],
     steps: [
       {
         text: "Go to the Home page. Use the dashboard sections to add more medications, daily care tasks, or upcoming plans when needed.",
@@ -43,7 +43,7 @@ const guideFeatures: GuideFeature[] = [
         note: "Use this page to quickly identify important medication times, care tasks, and scheduled events",
         image: {
           src: "/Guide/Picture2.png",
-          alt: "Calendar view — use Week or Month and the Today control to see medications, care tasks, and scheduled events",
+          alt: "Calendar view - use Week or Month and the Today control to see medications, care tasks, and scheduled events",
         },
       },
     ],
@@ -56,11 +56,11 @@ const guideFeatures: GuideFeature[] = [
     route: "/care-events",
     accentColor: "bg-purple-50",
     iconColor: "text-purple-500",
-    images: [{ src: "/Guide/Picture3.png", alt: "Care Events — add home care tasks and review activities" }],
+    images: [{ src: "/Guide/Picture3.png", alt: "Care Events - add home care tasks and review activities" }],
     steps: [
       { text: "Open Care Events and use Add Medication on the left. The form is a short wizard (photo → name → dosage → dates & repeat → how often & meal timing → dose times → review)." },
       {
-        text: "Optional photo of the label — only to help you fill the form on your device; it isn’t uploaded or stored by the server.",
+        text: "Optional photo of the label - only to help you fill the form on your device; it isn’t uploaded or stored by the server.",
       },
       { text: "Enter the drug (search the list or type the name), then dosage (oral strength/quantity or another route), start/end dates, repeat, frequency, when to take (with meals), and administration times." },
       {
@@ -77,7 +77,7 @@ const guideFeatures: GuideFeature[] = [
     route: "/care-events",
     accentColor: "bg-rose-50",
     iconColor: "text-rose-500",
-    images: [{ src: "/Guide/Picture4.png", alt: "Care Events — Add Outdoor Event" }],
+    images: [{ src: "/Guide/Picture4.png", alt: "Care Events - Add Outdoor Event" }],
     steps: [
       { text: "Go to Care Events and open the Add Care Event section to manage daily caregiving activities." },
       {

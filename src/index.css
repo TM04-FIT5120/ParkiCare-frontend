@@ -52,7 +52,7 @@
   75%       { transform: translate3d(-30px, 30px, 0) scale(1.1); }
 }
 
-/* Static on mobile — animation only kicks in at md (768px) */
+/* Static on mobile - animation only kicks in at md (768px) */
 .bg-blob {
   will-change: transform;
 }

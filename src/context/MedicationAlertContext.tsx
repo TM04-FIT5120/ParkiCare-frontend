@@ -26,13 +26,13 @@ export function MedicationAlertProvider({ children }: { children: ReactNode }) {
     setPendingAlert((prev) => {
       // Deduplicate: if this remindId is already showing, don't stack another modal.
       if (prev?.remindId === alert.remindId) {
-        console.log('[MedicationAlertContext] dispatchAlert — duplicate remindId, keeping existing alert:', alert.remindId);
+        console.log('[MedicationAlertContext] dispatchAlert - duplicate remindId, keeping existing alert:', alert.remindId);
         return prev;
       }
-      console.log('[MedicationAlertContext] dispatchAlert — setting pendingAlert to:', JSON.stringify(alert));
+      console.log('[MedicationAlertContext] dispatchAlert - setting pendingAlert to:', JSON.stringify(alert));
       return alert;
     });
-    // If a snooze timer was pending for this remindId, clear it — the FCM re-fired.
+    // If a snooze timer was pending for this remindId, clear it - the FCM re-fired.
     if (snoozeTimerRef.current !== null) {
       clearTimeout(snoozeTimerRef.current);
       snoozeTimerRef.current = null;
@@ -40,7 +40,7 @@ export function MedicationAlertProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const dismissAlert = useCallback(() => {
-    console.log('[MedicationAlertContext] dismissAlert called — clearing pendingAlert.');
+    console.log('[MedicationAlertContext] dismissAlert called - clearing pendingAlert.');
     setPendingAlert(null);
   }, []);
 

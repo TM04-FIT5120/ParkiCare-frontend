@@ -28,7 +28,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
       iconColor: "text-[#4318FF]",
       title: "What is Parkinson's Disease?",
       preview:
-        "A progressive neurological disorder that affects movement, mood, and sleep — often years before tremors appear. Learn the early invisible symptoms most caregivers miss.",
+        "A progressive neurological disorder that affects movement, mood, and sleep. Often years before tremors appear. Learn the early invisible symptoms most caregivers miss.",
       image: "https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&q=80&w=800",
       imageAlt: "Parkinson's awareness",
       content: (
@@ -57,7 +57,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
             ))}
           </ul>
           <p className="text-[#707EAE] leading-relaxed">
-            Knowing these issues are actual symptoms of Parkinson's — and not just "normal aging" — can help you
+            Knowing these issues are actual symptoms of Parkinson's and not just "normal aging" can help you
             provide more patient, empathetic care and communicate better with the neurologist.
           </p>
           <a href="https://doi.org/10.1002/mds.26431" target="_blank" rel="noopener noreferrer"
@@ -118,7 +118,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
           <div className="bg-[#FFF9E6] border-l-4 border-[#FFB800] p-4 rounded-lg">
             <p className="flex items-start gap-2 text-[#2B3674] font-bold">
               <Lightbulb className="w-5 h-5 text-[#FFB800] shrink-0 mt-0.5" />
-              <span><strong>Caregiver Tip:</strong> Log any of these symptoms in your ParkiCare Daily Record — it's crucial information for the neurologist!</span>
+              <span><strong>Caregiver Tip:</strong> Log any of these symptoms in your ParkiCare Daily Record. It's crucial information for the neurologist!</span>
             </p>
           </div>
           <div className="space-y-1">
@@ -176,7 +176,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
       iconColor: "text-[#4318FF]",
       title: "Your Daily Observation Checklist",
       preview:
-        "A practical guide to what to watch for every day — from medication \"On/Off\" timing and fall risks to invisible emotional fluctuations and mealtime safety.",
+        "A practical guide to what to watch for every day, from medication \"On/Off\" timing and fall risks to invisible emotional fluctuations and mealtime safety.",
       image: "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?auto=format&fit=crop&q=80&w=800",
       imageAlt: "Checklist and clipboard",
       content: (
@@ -267,7 +267,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
       iconColor: "text-[#4318FF]",
       title: "The Golden Rules of Medication",
       preview:
-        "Parkinson's medications are time-critical — a 30-minute delay can cause severe \"Off\" periods or freezing. Learn the rules every caregiver must follow and never break.",
+        "Parkinson's medications are time-critical, a 30-minute delay can cause severe \"Off\" periods or freezing. Learn the rules every caregiver must follow and never break.",
       image: "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&q=80&w=800",
       imageAlt: "Medication and pills",
       content: (
@@ -307,7 +307,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
       iconColor: "text-[#4318FF]",
       title: "Daily Care & Home Guidelines",
       preview:
-        "Practical guidance on nutrition, constipation, swallowing, fall prevention, and exercise — the day-to-day practices that protect your loved one's health and safety at home.",
+        "Practical guidance on nutrition, constipation, swallowing, fall prevention, and exercise, the day-to-day practices that protect your loved one's health and safety at home.",
       image: "https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&q=80&w=800",
       imageAlt: "Home care and daily activities",
       content: (
@@ -334,7 +334,7 @@ function useSections(navigate: ReturnType<typeof useNavigate>): Section[] {
       id: 8,
       icon: Phone,
       iconColor: "text-red-600",
-      title: "Red Flags — When to Call the Doctor",
+      title: "Red Flags - When to Call the Doctor",
       preview:
         "You are not expected to handle everything alone. Know the physical emergencies and mental health crises that require immediate professional intervention.",
       image: "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&q=80&w=800",
@@ -411,7 +411,7 @@ export function PerkinsDetailsPage() {
         </div>
 
         <div className="md:w-1/2 bg-[#2B3674] flex flex-col md:min-h-[400px]">
-          {/* Video/poster area — aspect-video on mobile so it always has height;
+          {/* Video/poster area - aspect-video on mobile so it always has height;
               md:flex-1 + md:relative so it fills the panel in side-by-side layout */}
           <div className="relative aspect-video md:aspect-auto md:flex-1">
             {isVideoPlaying ? (

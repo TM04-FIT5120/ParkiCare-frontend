@@ -43,7 +43,7 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans selection:bg-indigo-200 flex flex-col relative overflow-hidden">
       <ScrollToTop />
-      {/* Background blobs — CSS-animated so the browser can schedule them on
+      {/* Background blobs - CSS-animated so the browser can schedule them on
           the compositor thread, not the JS main thread. Static on mobile to
           keep touch scroll completely jank-free. */}
       <div

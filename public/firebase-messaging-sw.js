@@ -56,7 +56,7 @@ self.addEventListener('notificationclick', (event) => {
       Promise.all([
         remindId && caregiverId
           ? fetch(`${API_BASE}/reminder/confirm/${remindId}?caregiverId=${caregiverId}`, { method: 'PATCH' })
-              .catch(() => { /* non-critical — user can still confirm in-app */ })
+              .catch(() => { /* non-critical - user can still confirm in-app */ })
           : Promise.resolve(),
         focusOrOpenApp(),
       ])
@@ -70,7 +70,7 @@ self.addEventListener('notificationclick', (event) => {
         : Promise.resolve()
     );
   } else {
-    // Default body click — open or focus the app.
+    // Default body click - open or focus the app.
     event.waitUntil(focusOrOpenApp());
   }
 });
@@ -150,13 +150,13 @@ function broadcastMedicationAlert({ remindId, caregiverId, title, body }) {
 // Firebase compat v10 (SW) → Firebase modular v12 (React app): version mismatch
 // causes MessagePayload.data to arrive as undefined in onMessage, so the normal
 // dispatchAlert path is silently skipped. This raw push listener reads the FCM
-// payload directly from event.data.json() — no SDK parsing, no version issues —
+// payload directly from event.data.json() - no SDK parsing, no version issues -
 // and broadcasts via BroadcastChannel so the React app always gets the alert
 // regardless of whether the tab is foreground or background.
 self.addEventListener('push', (event) => {
   console.log('[SW push] Event fired. Has data:', !!event.data);
   if (!event.data) {
-    console.warn('[SW push] No data in push event — skipping.');
+    console.warn('[SW push] No data in push event - skipping.');
     return;
   }
   try {
@@ -167,7 +167,7 @@ self.addEventListener('push', (event) => {
     const { remindId, caregiverId, title, body } = data;
     console.log('[SW push] Extracted fields:', { remindId, caregiverId, title, body });
     if (remindId && caregiverId) {
-      console.log('[SW push] Valid alert — broadcasting full alert.');
+      console.log('[SW push] Valid alert - broadcasting full alert.');
       event.waitUntil(
         broadcastMedicationAlert({ remindId, caregiverId, title, body })
       );
@@ -176,7 +176,7 @@ self.addEventListener('push', (event) => {
       // React app can call the API to recover remindId/caregiverId.
       const notifTitle = raw.notification?.title ?? title;
       const notifBody = raw.notification?.body ?? body;
-      console.warn('[SW push] Missing remindId/caregiverId — broadcasting NOTIFICATION_RECEIVED fallback.', { notifTitle, notifBody });
+      console.warn('[SW push] Missing remindId/caregiverId - broadcasting NOTIFICATION_RECEIVED fallback.', { notifTitle, notifBody });
       event.waitUntil(
         broadcastNotificationReceived(notifTitle, notifBody)
       );
@@ -202,7 +202,7 @@ const messaging = firebase.messaging();
 
 // Background notifications (tab in background or app closed).
 // Backend sends data-only FCM messages so title/body/remindId/caregiverId all
-// come from payload.data — this guarantees the service worker handles the
+// come from payload.data, this guarantees the service worker handles the
 // message on every platform, including Android Chrome PWA.
 messaging.onBackgroundMessage((payload) => {
   console.log('[SW onBackgroundMessage] Fired. Full payload:', JSON.stringify(payload));
@@ -229,13 +229,13 @@ messaging.onBackgroundMessage((payload) => {
   // Tell any open app tabs to show the in-app blocking modal.
   // BroadcastChannel is used instead of clients.matchAll() + client.postMessage()
   // because clients.matchAll() returns an empty list on Windows Chrome when the
-  // tab is visible but the OS window doesn't have focus — a well-known Chrome bug.
+  // tab is visible but the OS window doesn't have focus, a well-known Chrome bug.
   // BroadcastChannel broadcasts to all listening pages without needing to enumerate
   // clients, making it reliable across all desktop and mobile platforms.
   if (remindId && caregiverId) {
     broadcastMedicationAlert({ remindId, caregiverId, title, body });
   } else {
-    console.warn('[SW onBackgroundMessage] Missing remindId/caregiverId — broadcasting NOTIFICATION_RECEIVED fallback.');
+    console.warn('[SW onBackgroundMessage] Missing remindId/caregiverId - broadcasting NOTIFICATION_RECEIVED fallback.');
     broadcastNotificationReceived(title, body);
   }
 });

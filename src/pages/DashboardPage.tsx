@@ -337,11 +337,11 @@ export function DashboardPage() {
         Number(snapshot.caregiverId),
       );
     } catch {
-      // non-critical — backend will retry via FCM; silent fail is acceptable
+      // non-critical - backend will retry via FCM; silent fail is acceptable
     }
     // Client-side safety net: re-show modal in 5 min if FCM re-fire is delayed.
     // The backend's snooze endpoint will also re-fire FCM after 5 min, which
-    // calls dispatchAlert again — the context deduplicates by remindId.
+    // calls dispatchAlert again - the context deduplicates by remindId.
     scheduleAlertReshow(snapshot, 5 * 60 * 1000);
   };
 
@@ -989,7 +989,7 @@ export function DashboardPage() {
       <AnimatePresence>
         {pendingAlert && (
           <>
-            {/* Full-screen backdrop — covers everything, blocks all interaction */}
+            {/* Full-screen backdrop - covers everything, blocks all interaction */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
