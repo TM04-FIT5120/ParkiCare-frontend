@@ -581,7 +581,7 @@ export function DashboardPage() {
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleDeleteItem(item); }}
                           disabled={deletingKeys.has(item.rowKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed opacity-100 md:opacity-0 md:group-hover:opacity-100"
                           aria-label="Delete event"
                         >
                           {deletingKeys.has(item.rowKey)
@@ -1008,7 +1008,7 @@ export function DashboardPage() {
               >
                 <div className="bg-white rounded-[24px] shadow-[0_32px_80px_rgba(0,0,0,0.25)] overflow-hidden">
                   {/* Header band */}
-                  <div className="bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] px-8 py-5 flex items-center gap-4">
+                  <div className="bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] px-5 sm:px-8 py-4 sm:py-5 flex items-center gap-3 sm:gap-4">
                     <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                       <Bell className="w-6 h-6 text-white" />
                     </div>
@@ -1018,7 +1018,7 @@ export function DashboardPage() {
                   </div>
 
                   {/* Body */}
-                  <div className="px-8 py-6">
+                  <div className="px-5 sm:px-8 py-4 sm:py-6">
                     <p className="text-sm text-[#A3AED0] font-bold mb-2">Time to administer:</p>
                     <p className="text-[#2B3674] font-bold text-base leading-relaxed">{pendingAlert.body}</p>
 
@@ -1028,7 +1028,7 @@ export function DashboardPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="px-8 pb-8 flex gap-4">
+                  <div className="px-5 sm:px-8 pb-5 sm:pb-8 flex gap-3 sm:gap-4">
                     <button
                       type="button"
                       onClick={handleAlertSnooze}

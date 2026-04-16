@@ -75,11 +75,11 @@ export function PatientSetupPage() {
         onMouseMove={handleMouseMove}
       >
       {/* Background Decor */}
-      <div className="absolute top-[-10%] right-[-5%] w-[40rem] h-[40rem] rounded-full bg-blue-100/40 blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] left-[-5%] w-[30rem] h-[30rem] rounded-full bg-red-100/30 blur-[100px] pointer-events-none" />
+      <div className="absolute top-[-10%] right-[-5%] w-[min(40rem,80vw)] h-[min(40rem,80vw)] rounded-full bg-blue-100/40 blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-5%] w-[min(30rem,70vw)] h-[min(30rem,70vw)] rounded-full bg-red-100/30 blur-[100px] pointer-events-none" />
 
       {/* Left side Form */}
-      <div className="w-full lg:w-[45%] flex items-center justify-center px-8 py-4 sm:px-12 sm:py-6 relative z-20">
+      <div className="w-full lg:w-[45%] flex items-center justify-center px-5 py-6 sm:px-10 sm:py-8 md:px-12 md:py-10 relative z-20">
         <div className="w-full max-w-[420px]">
           <motion.div
             className="flex justify-center mb-3"

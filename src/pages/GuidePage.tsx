@@ -1,9 +1,11 @@
 import { motion } from "motion/react";
-import { UserPlus, LayoutDashboard, Bell, Pill, BookOpen, Heart, MapPin } from "lucide-react";
+import { LayoutDashboard, Bell, Pill, Heart, MapPin, BookOpen } from "lucide-react";
 
 interface GuideStep {
   text: string;
   note?: string;
+  /** Optional screenshot shown below this step (e.g. mid-section callout) */
+  image?: { src: string; alt: string };
 }
 
 interface GuideFeature {
@@ -15,159 +17,136 @@ interface GuideFeature {
   accentColor: string;
   iconColor: string;
   steps: GuideStep[];
+  /** Screenshots from /public/Guide/ (PDF walkthrough + notification) */
+  images?: { src: string; alt: string }[];
 }
 
 const guideFeatures: GuideFeature[] = [
   {
     id: 1,
-    title: "Getting Started",
-    subtitle: "Register, set up your patient profile, and log in",
-    icon: <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />,
-    accentColor: "bg-indigo-50",
-    iconColor: "text-indigo-500",
-    steps: [
-      { text: "On the Register screen, enter a nickname and password to create your caregiver account." },
-      { text: "Complete Patient Setup: enter your patient's nickname and age range." },
-      {
-        text: "Your Profile page shows your unique User ID - tap the copy button to save it.",
-        note: "Your User ID is always accessible from the Profile page (top-right avatar).",
-      },
-      { text: "On future visits, log in with your User ID and password on the Login screen." },
-    ],
-  },
-  {
-    id: 2,
     title: "Using the Home Dashboard",
-    subtitle: "Your daily command centre for tasks and scheduling",
+    subtitle: "Add items and see today’s priorities",
     icon: <LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />,
     route: "/home",
     accentColor: "bg-blue-50",
     iconColor: "text-blue-500",
+    images: [{ src: "/Guide/Picture1.png", alt: "Home dashboard — add medications, care tasks, and plans" }],
     steps: [
-      { text: "My Agenda shows today's medications, home care tasks, and outdoor events in one list." },
-      { text: "Tap any agenda item to mark it complete. Tap again to undo." },
-      { text: "The Patient Care panel shows three organised lists: Medication List, Daily Care List, and Outdoor Event List." },
-      { text: "Use Schedule New Event (title, start/end time, date, recurrence) to add a one-off or recurring event directly from the Dashboard." },
-      { text: "The Calendar widget lets you switch between Day, Week, and Month views to browse upcoming events." },
       {
-        text: 'Tap "Add More" in any list to jump to the Care Events page for that category.',
-        note: "Medications and care events created on the Care Events page automatically appear here.",
+        text: "Go to the Home page. Use the dashboard sections to add more medications, daily care tasks, or upcoming plans when needed.",
+      },
+      {
+        text: "Use this page to quickly see important medication times, care tasks, and scheduled events for today.",
+      },
+      {
+        text: "Check today’s priorities",
+        note: "Use this page to quickly identify important medication times, care tasks, and scheduled events",
+        image: {
+          src: "/Guide/Picture2.png",
+          alt: "Calendar view — use Week or Month and the Today control to see medications, care tasks, and scheduled events",
+        },
       },
     ],
   },
   {
-    id: 3,
-    title: "Enabling Notifications",
-    subtitle: "Allow push alerts so you never miss a medication reminder",
-    icon: <Bell className="w-5 h-5 sm:w-6 sm:h-6" />,
-    accentColor: "bg-violet-50",
-    iconColor: "text-violet-500",
-    steps: [
-      { text: "Push notifications are currently supported on Android and desktop browsers (Chrome, Edge, Firefox)." },
-      { text: "When you log in for the first time, your browser will ask: \"Allow ParkiCare to send notifications?\" - tap Allow to enable push reminders." },
-      { text: "If you missed the prompt or tapped Block, open your browser's site settings, find ParkiCare, and change Notifications to Allow." },
-      { text: "Once notifications are enabled, medication reminders will appear as system alerts at the scheduled time even when the app is in the background." },
-      { text: "Tap a notification to open ParkiCare directly on the Dashboard, where you can mark the task complete or dismiss it." },
-      {
-        text: "iOS (iPhone / iPad) is not yet supported for push notifications.",
-        note: "iOS notification support is coming in a future update. For now, iOS users can still use all other features of ParkiCare - check the Dashboard manually for upcoming reminders.",
-      },
-    ],
-  },
-  {
-    id: 4,
+    id: 2,
     title: "Setting Medication Reminders",
-    subtitle: "Add and schedule medications using the multi-step form",
+    subtitle: "Scan, review, save, and respond to reminders",
     icon: <Pill className="w-5 h-5 sm:w-6 sm:h-6" />,
     route: "/care-events",
     accentColor: "bg-purple-50",
     iconColor: "text-purple-500",
+    images: [{ src: "/Guide/Picture3.png", alt: "Care Events — add home care tasks and review activities" }],
     steps: [
-      { text: "Go to Care Events and select the Medication section." },
-      { text: "The 7-step form guides you through: (1) optional medication photo → (2) search drug name → (3) enter dosage → (4) set start and optional end dates → (5) choose recurrence (Daily, Weekdays, Weekly, or None) → (6) set administration times → (7) review and confirm." },
-      { text: "Choose the drug type: Oral (standard) or a custom intake method. Set frequency: 1–4 times per day, or as needed." },
-      { text: "When a reminder appears on the Dashboard at the scheduled time, tap the task to mark it complete, or undo it if needed." },
-      { text: "To remove a medication, find it in the Medication List and tap the delete button." },
+      { text: "Open Care Events and use Add Medication on the left. The form is a short wizard (photo → name → dosage → dates & repeat → how often & meal timing → dose times → review)." },
+      {
+        text: "Optional photo of the label — only to help you fill the form on your device; it isn’t uploaded or stored by the server.",
+      },
+      { text: "Enter the drug (search the list or type the name), then dosage (oral strength/quantity or another route), start/end dates, repeat, frequency, when to take (with meals), and administration times." },
+      {
+        text: "On the Review step, check everything and tap Confirm & Save to add it to your Medication List and schedule.",
+      },
+      { text: "When a reminder appears, use Confirm Administration or Snooze 5 min as needed." },
+    ],
+  },
+  {
+    id: 3,
+    title: "Managing Care Events",
+    subtitle: "Daily care tasks and upcoming activities",
+    icon: <Heart className="w-5 h-5 sm:w-6 sm:h-6" />,
+    route: "/care-events",
+    accentColor: "bg-rose-50",
+    iconColor: "text-rose-500",
+    images: [{ src: "/Guide/Picture4.png", alt: "Care Events — Add Outdoor Event" }],
+    steps: [
+      { text: "Go to Care Events and open the Add Care Event section to manage daily caregiving activities." },
+      {
+        text: "Add tasks or events such as bathing, nursing care, appointments, or household-related responsibilities.",
+      },
+      { text: "Use this area to keep track of important plans and daily care responsibilities." },
+    ],
+  },
+  {
+    id: 4,
+    title: "Add Outdoor Event",
+    subtitle: "Plan outings and see them on your schedule",
+    icon: <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />,
+    route: "/care-events",
+    accentColor: "bg-emerald-50",
+    iconColor: "text-emerald-500",
+    images: [{ src: "/Guide/Picture5.png", alt: "Outdoor event saved on the care schedule" }],
+    steps: [
+      { text: "From the navigation menu, open the Care Events page." },
+      { text: "Select Add Outdoor Event to create a new outdoor event." },
+      { text: "Enter the event title, category or type, and event time." },
+      { text: "Tap Save Outdoor Event to add it to your care schedule." },
+      { text: "The event appears in your care planning section for easier daily management." },
     ],
   },
   {
     id: 5,
-    title: "Reading Parkinson's Details",
-    subtitle: "Learn Parkinson's essentials and access medical references",
+    title: "Notifications",
+    subtitle: "Allow alerts for medication reminders",
+    icon: <Bell className="w-5 h-5 sm:w-6 sm:h-6" />,
+    accentColor: "bg-violet-50",
+    iconColor: "text-violet-500",
+    images: [{ src: "/Guide/Picture6.png", alt: "Browser notification permission for ParkiCare" }],
+    steps: [
+      {
+        text: "After you log in, your browser may ask to allow notifications for ParkiCare. Choose Allow so medication reminders can reach you on time.",
+      },
+      {
+        text: "If you dismissed the prompt or chose Block, open the site settings for ParkiCare in your browser and set Notifications to Allow.",
+      },
+      {
+        text: "When a medication reminder fires, you may get a system notification and an in-app prompt to Confirm Administration or Snooze.",
+      },
+      {
+        text: "Push works well on Android and on desktop browsers such as Chrome, Edge, and Firefox.",
+        note: "On iPhone or iPad, add ParkiCare to the Home Screen and use a recent iOS version; enable notifications in system settings if prompted.",
+      },
+    ],
+  },
+  {
+    id: 6,
+    title: "Knowledge Hub",
+    subtitle: "Learn more about Parkinson’s care (optional)",
     icon: <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />,
     route: "/knowledge-hub",
     accentColor: "bg-sky-50",
     iconColor: "text-sky-500",
     steps: [
       { text: "Open Knowledge Hub from the top navigation." },
-      { text: 'Tap the play button to watch the video: "The Fundamentals of Parkinson\'s Care" (approx. 3 minutes).' },
-      { text: "Read the key concept cards: What is Parkinson's, The Symptom Cycle (On/Off periods), and Daily Restrictions." },
-      {
-        text: "Scroll down to find PubMed references and links to external resources for deeper reading.",
-        note: "The On/Off symptom cycle explains why medication timing is so important - the Knowledge Hub provides the context behind your reminders.",
-      },
+      { text: "Watch the introductory video and read the topic cards for fundamentals of Parkinson’s care." },
+      { text: "Use the references section for links to deeper reading." },
     ],
   },
-  {
-    id: 6,
-    title: "Managing Home Care Events",
-    subtitle: "Schedule and track all in-home care activities",
-    icon: <Heart className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/care-events",
-    accentColor: "bg-rose-50",
-    iconColor: "text-rose-500",
-    steps: [
-      { text: "Go to Care Events and select the Home Care section." },
-      { text: "Fill in the event form: title, type (Bathing, Nursing Care, Toileting Assist, Meals, Exercise, or Physical Therapy), start and end times (12-hour format), start date, optional end date, and recurrence." },
-      { text: "Submit the form. The event will appear in the Home Care Event List on the right panel." },
-      { text: "Hover over any event in the list to reveal the delete button and remove it." },
-      { text: "The History section records past events. Click the pin icon to mark frequently used events, then click a pinned event to auto-fill the form and reuse it quickly." },
-    ],
-  },
-  {
-    id: 7,
-    title: "Adding Outdoor Events",
-    subtitle: "Log appointments, walks, and outings for your patient",
-    icon: <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/care-events",
-    accentColor: "bg-emerald-50",
-    iconColor: "text-emerald-500",
-    steps: [
-      { text: "Go to Care Events and select the Outdoor Events section." },
-      { text: "Choose an event type: Doctor Appointment, Walk in Park, Social Visit, Shopping, Recreation, Family Outing, or enter a custom type." },
-      { text: "Fill in the same scheduling fields as Home Care events: title, start and end times, start date, optional end date, and recurrence." },
-      { text: "Submit to add the event. It will appear in the Outdoor Event List." },
-      {
-        text: "Use the History section to pin and reuse frequent outdoor activities.",
-        note: "Outdoor events also appear in the Dashboard agenda and in Digital Records under Outdoor Activity Records.",
-      },
-    ],
-  },
-  // {
-  //   id: 8,
-  //   title: "Viewing Digital Records",
-  //   subtitle: "Export structured care data for doctor consultations",
-  //   icon: <FileText className="w-5 h-5 sm:w-6 sm:h-6" />,
-  //   route: "/digital-records",
-  //   accentColor: "bg-amber-50",
-  //   iconColor: "text-amber-500",
-  //   steps: [
-  //     { text: "Open Digital Records from the top navigation." },
-  //     { text: "Three sections are available: Medication Records, Home Care Records, and Outdoor Activity Records." },
-  //     { text: "For each section, select a date range: Since Last Medical Visit, Last 30 Days, Custom Range, or Full History." },
-  //     { text: "Switch between view modes: Detailed (full event-by-event list), Summary (aggregated), or Narrative (readable prose)." },
-  //     {
-  //       text: "Use the Export button to download the report as a structured file to share with your neurologist or GP.",
-  //       note: "Prepare this before each medical appointment to give your doctor an accurate picture of the patient's routine and medication adherence.",
-  //     },
-  //   ],
-  // },
 ];
 
 export function GuidePage() {
   return (
     <div className="pb-6 sm:pb-8">
-      <div className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm backdrop-blur-xl">
+      <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="max-w-4xl mx-auto flex items-center gap-3 sm:gap-4">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
@@ -185,7 +164,7 @@ export function GuidePage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-4xl mx-auto"
+          className="max-w-4xl xl:max-w-5xl mx-auto"
         >
           {guideFeatures.map((feature, index) => (
             <motion.div
@@ -196,7 +175,6 @@ export function GuidePage() {
               className="bg-white rounded-2xl sm:rounded-3xl shadow-sm mb-4 sm:mb-6 border border-white/50 backdrop-blur-xl overflow-hidden"
             >
               <div className="p-4 sm:p-6 md:p-8">
-                {/* Card header */}
                 <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm sm:text-base font-bold shadow-md shrink-0">
                     {feature.id}
@@ -215,20 +193,51 @@ export function GuidePage() {
                   )}
                 </div>
 
-                {/* Divider */}
                 <div className="border-t border-gray-100 mb-4 sm:mb-5" />
 
-                {/* Steps */}
+                {feature.images && feature.images.length > 0 && (
+                  <div className="mb-5 sm:mb-6 space-y-4">
+                    {feature.images.map((img) => (
+                      <figure key={img.src} className="rounded-xl overflow-hidden border border-[#E0E5F2] bg-[#F4F7FE]">
+                        <img
+                          src={img.src}
+                          alt={img.alt}
+                          className="w-full h-auto max-h-[min(70vh,520px)] object-contain object-top mx-auto block"
+                          loading="lazy"
+                        />
+                        <figcaption className="px-3 py-2 text-xs text-[#707EAE] font-medium text-center border-t border-[#E0E5F2] bg-white">
+                          {img.alt}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
+
                 <ol className="space-y-3 sm:space-y-4">
                   {feature.steps.map((step, stepIndex) => (
                     <li key={stepIndex} className="flex items-start gap-3">
                       <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center mt-0.5">
                         {stepIndex + 1}
                       </span>
-                      <div>
+                      <div className="min-w-0 flex-1 space-y-3">
                         <p className="text-sm sm:text-base text-[#2B3674] font-medium leading-relaxed">{step.text}</p>
                         {step.note && (
-                          <p className="text-xs sm:text-sm text-[#707EAE] mt-1 italic">{step.note}</p>
+                          <p className="text-xs sm:text-sm text-[#707EAE] mt-1 not-italic font-medium leading-relaxed">
+                            {step.note}
+                          </p>
+                        )}
+                        {step.image && (
+                          <figure className="rounded-xl overflow-hidden border border-[#E0E5F2] bg-[#F4F7FE]">
+                            <img
+                              src={step.image.src}
+                              alt={step.image.alt}
+                              className="w-full h-auto max-h-[min(70vh,520px)] object-contain object-top mx-auto block"
+                              loading="lazy"
+                            />
+                            <figcaption className="px-3 py-2 text-xs text-[#707EAE] font-medium text-center border-t border-[#E0E5F2] bg-white">
+                              {step.image.alt}
+                            </figcaption>
+                          </figure>
                         )}
                       </div>
                     </li>
@@ -238,11 +247,10 @@ export function GuidePage() {
             </motion.div>
           ))}
 
-          {/* Closing card */}
           <div className="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-xl">
-            <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">You're all set!</h3>
+            <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">You&apos;re all set!</h3>
             <p className="text-sm sm:text-base text-indigo-100">
-              Explore the navigation links at the top to get started. Visit the Knowledge Hub anytime to learn more about Parkinson's care.
+              Use the navigation links at the top to open Home, Care Events, or the Knowledge Hub anytime.
             </p>
           </div>
         </motion.div>

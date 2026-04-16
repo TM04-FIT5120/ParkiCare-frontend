@@ -14,6 +14,8 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
   }
   body {
     margin: 0;
@@ -21,5 +23,48 @@
     font-family: "Inter", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent bounce-scroll overscroll from triggering repaints */
+    overscroll-behavior-y: none;
   }
+}
+
+/* ── Background blob CSS animations ────────────────────────────────────────
+   Using CSS @keyframes instead of JS-driven framer-motion so the browser
+   can schedule these on the compositor thread without competing with scroll.
+   Animations are disabled on mobile (<768px) so touch scrolling stays fluid.
+────────────────────────────────────────────────────────────────────────── */
+@keyframes blob-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0)    scale(1);   }
+  25%       { transform: translate3d(50px, 30px, 0) scale(1.1); }
+  50%       { transform: translate3d(0, 60px, 0)   scale(1);   }
+  75%       { transform: translate3d(-50px, 30px, 0) scale(1.1); }
+}
+@keyframes blob-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0)     scale(1);   }
+  25%       { transform: translate3d(-60px, 40px, 0) scale(1.2); }
+  50%       { transform: translate3d(0, -20px, 0)   scale(1);   }
+  75%       { transform: translate3d(60px, 40px, 0)  scale(1.2); }
+}
+@keyframes blob-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0)     scale(1);   }
+  25%       { transform: translate3d(30px, -30px, 0) scale(1.1); }
+  50%       { transform: translate3d(0, 0, 0)        scale(1);   }
+  75%       { transform: translate3d(-30px, 30px, 0) scale(1.1); }
+}
+
+/* Static on mobile — animation only kicks in at md (768px) */
+.bg-blob {
+  will-change: transform;
+}
+@media (min-width: 768px) {
+  .bg-blob-1 { animation: blob-drift-1 25s linear infinite; }
+  .bg-blob-2 { animation: blob-drift-2 30s linear infinite; }
+  .bg-blob-3 { animation: blob-drift-3 20s linear infinite; }
+}
+
+/* Respect the user/OS reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .bg-blob-1,
+  .bg-blob-2,
+  .bg-blob-3 { animation: none !important; }
 }

@@ -41,16 +41,16 @@ export function LoadingScreenPage() {
         className="relative z-10 flex flex-col items-center w-full max-w-md px-6"
       >
         {/* Logo Animation */}
-        <motion.div 
-          className="mb-16"
+        <motion.div
+          className="mb-8 sm:mb-16"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 1, type: "spring" as const, bounce: 0.4 }}
         >
-          <img 
+          <img
             src="/logo.png"
             alt="ParkiCare Logo"
-            className="w-[480px] h-[480px] object-contain drop-shadow-2xl"
+            className="w-[min(480px,80vw)] h-[min(480px,80vw)] object-contain drop-shadow-2xl"
           />
         </motion.div>
 

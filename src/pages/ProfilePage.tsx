@@ -62,7 +62,7 @@ export function ProfilePage() {
             y: [0, 30, 0],
           }}
           transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-10%] left-[-5%] w-[45rem] h-[45rem] rounded-full bg-blue-200/40 blur-[100px]"
+          className="absolute top-[-10%] left-[-5%] w-[min(45rem,85vw)] h-[min(45rem,85vw)] rounded-full bg-blue-200/40 blur-[100px]"
         />
         <motion.div
           animate={{
@@ -71,7 +71,7 @@ export function ProfilePage() {
             y: [0, 40, 0],
           }}
           transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute bottom-[-10%] right-[-5%] w-[40rem] h-[40rem] rounded-full bg-cyan-200/30 blur-[120px]"
+          className="absolute bottom-[-10%] right-[-5%] w-[min(40rem,80vw)] h-[min(40rem,80vw)] rounded-full bg-cyan-200/30 blur-[120px]"
         />
         <motion.div
           animate={{
@@ -80,7 +80,7 @@ export function ProfilePage() {
             y: [0, -30, 0],
           }}
           transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 4 }}
-          className="absolute top-[20%] left-[30%] w-[30rem] h-[30rem] rounded-full bg-sky-200/40 blur-[80px]"
+          className="absolute top-[20%] left-[30%] w-[min(30rem,60vw)] h-[min(30rem,60vw)] rounded-full bg-sky-200/40 blur-[80px]"
         />
       </div>
 

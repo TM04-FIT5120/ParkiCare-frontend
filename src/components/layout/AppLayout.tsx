@@ -43,35 +43,16 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans selection:bg-indigo-200 flex flex-col relative overflow-hidden">
       <ScrollToTop />
-      {/* Animated Light Blue Gradient Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <motion.div 
-          animate={{ 
-            x: [0, 50, 0, -50, 0],
-            y: [0, 30, 60, 30, 0],
-            scale: [1, 1.1, 1, 1.1, 1]
-          }}
-          transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-blue-200/40 blur-[100px]"
-        />
-        <motion.div 
-          animate={{ 
-            x: [0, -60, 0, 60, 0],
-            y: [0, 40, -20, 40, 0],
-            scale: [1, 1.2, 1, 1.2, 1]
-          }}
-          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-          className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-200/30 blur-[120px]"
-        />
-        <motion.div 
-          animate={{ 
-            x: [0, 30, 0, -30, 0],
-            y: [0, -30, 0, 30, 0],
-            scale: [1, 1.1, 1, 1.1, 1]
-          }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[30%] left-[60%] w-[30vw] h-[30vw] rounded-full bg-sky-200/40 blur-[80px]"
-        />
+      {/* Background blobs — CSS-animated so the browser can schedule them on
+          the compositor thread, not the JS main thread. Static on mobile to
+          keep touch scroll completely jank-free. */}
+      <div
+        className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
+        style={{ transform: "translateZ(0)" }}
+      >
+        <div className="bg-blob bg-blob-1 absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-blue-200/40 blur-[100px]" />
+        <div className="bg-blob bg-blob-2 absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-200/30 blur-[120px]" />
+        <div className="bg-blob bg-blob-3 absolute top-[30%] left-[60%] w-[30vw] h-[30vw] rounded-full bg-sky-200/40 blur-[80px]" />
       </div>
 
       {/* Top Navigation - Clean White, Soft Shadow */}
@@ -79,9 +60,9 @@ export const AppLayout = () => {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ type: "spring" as const, stiffness: 200, damping: 20 }}
-        className="sticky top-0 z-50 px-4 sm:px-6 py-3 bg-white/90 backdrop-blur-xl shadow-[0_18px_40px_rgba(112,144,176,0.08)] flex items-center justify-between"
+        className="sticky top-0 z-50 px-4 sm:px-6 py-3 bg-white/95 sm:bg-white/90 sm:backdrop-blur-xl shadow-[0_4px_20px_rgba(112,144,176,0.08)] flex items-center justify-between"
       >
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-3 md:gap-6 lg:gap-8">
           <Link to="/home" className="flex items-center gap-2 group shrink-0">
             <motion.img 
               whileHover={{ rotate: 10, scale: 1.05 }}
@@ -98,10 +79,10 @@ export const AppLayout = () => {
             {navLinks.map((link) => {
               const isActive = location.pathname.startsWith(link.path);
               return (
-                <Link 
+                <Link
                   key={link.path}
                   to={link.path}
-                  className="relative px-4 py-2 rounded-full text-[13px] font-bold transition-all duration-300"
+                  className="relative px-2.5 py-2 md:px-3 lg:px-4 rounded-full text-[12px] lg:text-[13px] font-bold transition-all duration-300"
                 >
                   {isActive && (
                     <motion.div 
@@ -119,7 +100,7 @@ export const AppLayout = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
           {/* Language Switcher instead of Bell */}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#F4F7FE] hover:bg-[#E9E3FF] rounded-full text-xs font-bold text-[#4318FF] transition-colors focus:outline-none">
@@ -243,12 +224,12 @@ export const AppLayout = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col w-full relative">
         <AnimatePresence mode="wait">
-          <motion.main 
+          <motion.main
             key={location.pathname}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             className="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6 md:p-7 xl:p-8"
           >
             <Outlet />
