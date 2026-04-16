@@ -3,6 +3,7 @@ import api from '@/lib/api';
 export interface PushSubscriptionPayload {
   caregiverId: number;
   fcmToken: string;
+  deviceId: string;
   deviceType: string;
 }
 

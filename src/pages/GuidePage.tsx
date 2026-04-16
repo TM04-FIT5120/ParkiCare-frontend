@@ -143,25 +143,25 @@ const guideFeatures: GuideFeature[] = [
       },
     ],
   },
-  {
-    id: 8,
-    title: "Viewing Digital Records",
-    subtitle: "Export structured care data for doctor consultations",
-    icon: <FileText className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/digital-records",
-    accentColor: "bg-amber-50",
-    iconColor: "text-amber-500",
-    steps: [
-      { text: "Open Digital Records from the top navigation." },
-      { text: "Three sections are available: Medication Records, Home Care Records, and Outdoor Activity Records." },
-      { text: "For each section, select a date range: Since Last Medical Visit, Last 30 Days, Custom Range, or Full History." },
-      { text: "Switch between view modes: Detailed (full event-by-event list), Summary (aggregated), or Narrative (readable prose)." },
-      {
-        text: "Use the Export button to download the report as a structured file to share with your neurologist or GP.",
-        note: "Prepare this before each medical appointment to give your doctor an accurate picture of the patient's routine and medication adherence.",
-      },
-    ],
-  },
+  // {
+  //   id: 8,
+  //   title: "Viewing Digital Records",
+  //   subtitle: "Export structured care data for doctor consultations",
+  //   icon: <FileText className="w-5 h-5 sm:w-6 sm:h-6" />,
+  //   route: "/digital-records",
+  //   accentColor: "bg-amber-50",
+  //   iconColor: "text-amber-500",
+  //   steps: [
+  //     { text: "Open Digital Records from the top navigation." },
+  //     { text: "Three sections are available: Medication Records, Home Care Records, and Outdoor Activity Records." },
+  //     { text: "For each section, select a date range: Since Last Medical Visit, Last 30 Days, Custom Range, or Full History." },
+  //     { text: "Switch between view modes: Detailed (full event-by-event list), Summary (aggregated), or Narrative (readable prose)." },
+  //     {
+  //       text: "Use the Export button to download the report as a structured file to share with your neurologist or GP.",
+  //       note: "Prepare this before each medical appointment to give your doctor an accurate picture of the patient's routine and medication adherence.",
+  //     },
+  //   ],
+  // },
 ];
 
 export function GuidePage() {

@@ -43,6 +43,14 @@ export function RegisterPage() {
       toast.error("Passwords do not match");
       return;
     }
+    if (formData.password.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return;
+    }
+    if (formData.password.length > 20) {
+      toast.error("Password must be less than 20 characters long");
+      return;
+    }
     if (!/^[a-zA-Z0-9]{6,20}$/.test(formData.nickname)) {
       toast.error("Nickname must be 6–20 alphanumeric characters");
       return;

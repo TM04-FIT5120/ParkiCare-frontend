@@ -5,6 +5,7 @@ import {
   completionLookupKey,
   isEventOnDay,
   occurrenceIsoForDay,
+  resolveMedicationRecurrence,
 } from "@/lib/eventRecurrence";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ function buildDay(
   meds.forEach((m) => {
     if (!m.time) return;
     const startDate = m.startDate ?? dayStr;
-    const rec = m.recurrence ?? "daily";
+    const rec = resolveMedicationRecurrence(m.recurrence, startDate, m.endDate ?? null);
     if (!isEventOnDay(dayStr, startDate, m.endDate, rec)) return;
     const sid = m.remindId ?? m.id;
     const occurrenceStart = occurrenceIsoForDay(dayStr, m.time);

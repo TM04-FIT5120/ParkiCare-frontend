@@ -1,18 +1,42 @@
-import { BrowserRouter } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { CareEventsProvider } from "@/context/CareEventsProvider";
+import { MedicationAlertProvider, useMedicationAlert } from "@/context/MedicationAlertContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { AppRoutes } from "@/routes/AppRoutes";
 
+const NotificationBootstrap = () => {
+  usePushNotifications();
+  return null;
+};
+
+const MedicationAlertRouteGuard = () => {
+  const { pendingAlert } = useMedicationAlert();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (pendingAlert && location.pathname !== "/home") {
+      navigate("/home");
+    }
+  }, [pendingAlert, location.pathname, navigate]);
+
+  return null;
+};
+
 export const App = () => (
-  <>
+  <MedicationAlertProvider>
     <Toaster position="top-center" richColors />
     <BrowserRouter>
       <AuthProvider>
         <CareEventsProvider>
+          <NotificationBootstrap />
+          <MedicationAlertRouteGuard />
           <AppRoutes />
         </CareEventsProvider>
       </AuthProvider>
     </BrowserRouter>
-  </>
+  </MedicationAlertProvider>
 );

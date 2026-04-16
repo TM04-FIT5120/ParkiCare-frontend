@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Pill, Clock, Plus, Info, Check, Search, AlertCircle, Trash2, CalendarHeart, Upload, MapPin, Calendar } from "lucide-react";
+import { Pill, Clock, Plus, Info, Check, Search, AlertCircle, Trash2, CalendarHeart, Upload, MapPin, Calendar, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
 import { useAuth } from "@/context/AuthContext";
@@ -8,12 +8,14 @@ import { drugsService, type DrugBase } from "@/services/drugs";
 import { careEventsService } from "@/services/careEvents";
 import { HistorySection } from "@/components/HistorySection";
 import type { CareEvent } from "@/context/careEventsContext";
+import { getMYTDateString } from "@/lib/eventRecurrence";
 
 const CARE_EVENT_TYPES = ["Bathing", "Nursing Care", "Toileting Assist", "Meals", "Exercise", "Physical Therapy"];
 const OUTDOOR_EVENT_TYPES = ["Doctor Appointment", "Walk in Park", "Social Visit", "Shopping", "Recreation", "Family Outing"];
-const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day", "As needed"];
+const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day"];
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
+const MED_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 
 function getDayName(dateStr: string): string {
   if (!dateStr) return "selected day";
@@ -52,10 +54,10 @@ export function CareEventsPage() {
   const [quantity, setQuantity] = useState<number | "">(1);
   const [intakeMethod, setIntakeMethod] = useState("");
   // Schedule
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => getMYTDateString());
   const [isNeverEnding, setIsNeverEnding] = useState(true);
   const [endDate, setEndDate] = useState("");
-  const [recurrence, setRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("daily");
+  const [recurrence, setRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
   // Frequency & meal timing
   const [frequency, setFrequency] = useState("2 times/day");
   const [mealTiming, setMealTiming] = useState<"before meals" | "after meals" | "with meals">("after meals");
@@ -74,6 +76,7 @@ export function CareEventsPage() {
   const [medicationStep, setMedicationStep] = useState(1);
   const drugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manufacturerJustSelected = useRef(false);
 
   // --- Care Event state ---
   const [careEventTitle, setCareEventTitle] = useState("");
@@ -85,7 +88,7 @@ export function CareEventsPage() {
   const [careEventEndTimeHour, setCareEventEndTimeHour] = useState("09");
   const [careEventEndTimeMinute, setCareEventEndTimeMinute] = useState("00");
   const [careEventEndTimePeriod, setCareEventEndTimePeriod] = useState("AM");
-  const [careEventStartDate, setCareEventStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [careEventStartDate, setCareEventStartDate] = useState(() => getMYTDateString());
   const [careEventIsNeverEnding, setCareEventIsNeverEnding] = useState(true);
   const [careEventEndDate, setCareEventEndDate] = useState("");
   const [careEventRecurrence, setCareEventRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
@@ -100,10 +103,18 @@ export function CareEventsPage() {
   const [outdoorEventEndTimeHour, setOutdoorEventEndTimeHour] = useState("09");
   const [outdoorEventEndTimeMinute, setOutdoorEventEndTimeMinute] = useState("00");
   const [outdoorEventEndTimePeriod, setOutdoorEventEndTimePeriod] = useState("AM");
-  const [outdoorEventStartDate, setOutdoorEventStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [outdoorEventStartDate, setOutdoorEventStartDate] = useState(() => getMYTDateString());
   const [outdoorEventIsNeverEnding, setOutdoorEventIsNeverEnding] = useState(true);
   const [outdoorEventEndDate, setOutdoorEventEndDate] = useState("");
   const [outdoorEventRecurrence, setOutdoorEventRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
+
+  // Loading states for API-wired buttons
+  const [isSavingMed, setIsSavingMed] = useState(false);
+  const [isSavingCare, setIsSavingCare] = useState(false);
+  const [isSavingOutdoor, setIsSavingOutdoor] = useState(false);
+  const [deletingMedIds, setDeletingMedIds] = useState<Set<number>>(new Set());
+  const [deletingCareIds, setDeletingCareIds] = useState<Set<number>>(new Set());
+  const [deletingOutdoorIds, setDeletingOutdoorIds] = useState<Set<number>>(new Set());
 
   // Separate events into care and outdoor
   const careEvents = events.filter(ev => CARE_EVENT_TYPES.includes(ev.type) || ev.eventType === "home");
@@ -114,7 +125,7 @@ export function CareEventsPage() {
     if (event.eventType === "home") {
       setCareEventTitle(event.title);
       if (event.type && event.type !== "Home Care") setCareEventType(event.type);
-      setCareEventStartDate(new Date().toISOString().slice(0, 10));
+      setCareEventStartDate(getMYTDateString());
       setCareEventIsNeverEnding(true);
       setCareEventEndDate("");
       setCareEventRecurrence("none");
@@ -125,7 +136,7 @@ export function CareEventsPage() {
     } else if (event.eventType === "outdoor") {
       setOutdoorEventTitle(event.title);
       if (event.type && event.type !== "Outdoor") setOutdoorEventType(event.type);
-      setOutdoorEventStartDate(new Date().toISOString().slice(0, 10));
+      setOutdoorEventStartDate(getMYTDateString());
       setOutdoorEventIsNeverEnding(true);
       setOutdoorEventEndDate("");
       setOutdoorEventRecurrence("none");
@@ -139,8 +150,9 @@ export function CareEventsPage() {
   // Debounced drug name search
   useEffect(() => {
     if (drugSearchTimer.current) clearTimeout(drugSearchTimer.current);
-    if (!medName.trim()) {
+    if (!medName.trim() || selectedDrug !== null) {
       setDrugSearchResults([]);
+      setShowMedsDropdown(false);
       return;
     }
     drugSearchTimer.current = setTimeout(async () => {
@@ -153,12 +165,17 @@ export function CareEventsPage() {
       }
     }, 350);
     return () => { if (drugSearchTimer.current) clearTimeout(drugSearchTimer.current); };
-  }, [medName]);
+  }, [medName, selectedDrug]);
 
   // Debounced manufacturer name search
   useEffect(() => {
     if (manufacturerSearchTimer.current) clearTimeout(manufacturerSearchTimer.current);
     if (!manufacturerName.trim()) {
+      setManufacturerSuggestions([]);
+      return;
+    }
+    if (manufacturerJustSelected.current) {
+      manufacturerJustSelected.current = false;
       setManufacturerSuggestions([]);
       return;
     }
@@ -205,10 +222,10 @@ export function CareEventsPage() {
     setDosagePart("oral");
     setQuantity(1);
     setIntakeMethod("");
-    setStartDate(new Date().toISOString().slice(0, 10));
+    setStartDate(getMYTDateString());
     setIsNeverEnding(true);
     setEndDate("");
-    setRecurrence("daily");
+    setRecurrence("none");
     setFrequency("2 times/day");
     setMealTiming("after meals");
     setMedTimes([{ hour: "08", minute: "00", period: "AM" }, { hour: "08", minute: "00", period: "PM" }]);
@@ -244,47 +261,55 @@ export function CareEventsPage() {
     const finalDosage = dosagePart === "oral" ? dose.trim() : intakeMethod.trim();
     const finalQuantity = dosagePart === "oral" && quantity !== "" ? Number(quantity) : null;
     const finalIntakeMethod = dosagePart === "other" ? intakeMethod.trim() : null;
-    const finalEndDate = isNeverEnding ? null : endDate || null;
-    const finalRecurrence = recurrence === "none" ? null : recurrence;
+    const finalEndDate = isNeverEnding ? startDate : (endDate || null);
+    const finalRecurrence = recurrence;
 
-    if (patientId && selectedDrug) {
-      try {
-        const created = await careEventsService.createMedication(
-          patientId,
-          selectedDrug.drugId,
-          finalDosage,
-          frequency,
-          adminTimesStr,
-          remindTime,
-          startDate,
-          "",
-          mealTiming,
-          finalQuantity,
-          finalIntakeMethod,
-          finalEndDate,
-          finalRecurrence,
-        );
-        addMed({
-          remindId: created.remindId,
-          drugId: created.drugId,
-          name: selectedDrug.drugName,
-          dose: finalDosage,
-          frequency,
-          time: remindTime,
+    setIsSavingMed(true);
+    try {
+      if (patientId && selectedDrug) {
+        try {
+          const created = await careEventsService.createMedication(
+            patientId,
+            selectedDrug.drugId,
+            finalDosage,
+            frequency,
+            adminTimesStr,
+            remindTime,
+            startDate,
+            "",
+            mealTiming,
+            finalQuantity,
+            finalIntakeMethod,
+            finalEndDate,
+            finalRecurrence,
+          );
+          addMed({
+            remindId: created.remindId,
+            drugId: created.drugId,
+            name: selectedDrug.drugName,
+            dose: finalDosage,
+            frequency,
+            time: remindTime,
+            startDate: created.startDate,
+            endDate: created.endDate ?? undefined,
+            recurrence: created.recurrence ?? "none",
+          });
+          toast.success("Medication scheduled successfully!");
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to save medication");
+          return;
+        }
+      } else {
+        validTimes.forEach(t => {
+          addMed({ name: medName, dose: finalDosage, frequency, time: to24h(t.hour, t.minute, t.period) });
         });
-        toast.success("Medication scheduled successfully!");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to save medication");
-        return;
+        toast.success("Medication saved locally");
       }
-    } else {
-      validTimes.forEach(t => {
-        addMed({ name: medName, dose: finalDosage, frequency, time: to24h(t.hour, t.minute, t.period) });
-      });
-      toast.success("Medication saved locally");
-    }
 
-    resetMedicationForm();
+      resetMedicationForm();
+    } finally {
+      setIsSavingMed(false);
+    }
   };
 
   const handleNextStep = () => {
@@ -346,50 +371,55 @@ export function CareEventsPage() {
     const endDatetimeFinal = `${endDateBase}T${endTime24}:00`;
     const displayTime = formatDisplayTime(careEventTimeHour, careEventTimeMinute, careEventTimePeriod);
 
-    if (patientId) {
-      try {
-        const created = await careEventsService.createHomeCare(
-          patientId,
-          caregiverId,
-          careEventTitle,
-          startDatetime,
-          endDatetimeFinal,
-          "",
-          false,
-          careEventRecurrence,
-        );
-        addEvent({
-          backendId: created.id,
-          eventType: "home",
-          title: created.homeCareTitle,
-          type: careEventType,
-          time: displayTime,
-          startDatetime: created.startDatetime,
-          endDatetime: created.endDatetime,
-          recurrence: created.recurrence,
-        });
-        toast.success("Care event scheduled successfully!");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to save care event");
-        return;
+    setIsSavingCare(true);
+    try {
+      if (patientId) {
+        try {
+          const created = await careEventsService.createHomeCare(
+            patientId,
+            caregiverId,
+            careEventTitle,
+            startDatetime,
+            endDatetimeFinal,
+            "",
+            false,
+            careEventRecurrence,
+          );
+          addEvent({
+            backendId: created.id,
+            eventType: "home",
+            title: created.homeCareTitle,
+            type: careEventType,
+            time: displayTime,
+            startDatetime: created.startDatetime,
+            endDatetime: created.endDatetime,
+            recurrence: created.recurrence,
+          });
+          toast.success("Care event scheduled successfully!");
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to save care event");
+          return;
+        }
+      } else {
+        addEvent({ title: careEventTitle, type: careEventType, time: displayTime });
+        toast.success("Care event saved locally");
       }
-    } else {
-      addEvent({ title: careEventTitle, type: careEventType, time: displayTime });
-      toast.success("Care event saved locally");
-    }
 
-    setCareEventTitle("");
-    setCareEventType("Bathing");
-    setCareEventTimeHour("08");
-    setCareEventTimeMinute("00");
-    setCareEventTimePeriod("AM");
-    setCareEventStartDate(new Date().toISOString().slice(0, 10));
-    setCareEventIsNeverEnding(true);
-    setCareEventEndDate("");
-    setCareEventRecurrence("none");
-    setCareEventEndTimeHour("09");
-    setCareEventEndTimeMinute("00");
-    setCareEventEndTimePeriod("AM");
+      setCareEventTitle("");
+      setCareEventType("Bathing");
+      setCareEventTimeHour("08");
+      setCareEventTimeMinute("00");
+      setCareEventTimePeriod("AM");
+      setCareEventStartDate(getMYTDateString());
+      setCareEventIsNeverEnding(true);
+      setCareEventEndDate("");
+      setCareEventRecurrence("none");
+      setCareEventEndTimeHour("09");
+      setCareEventEndTimeMinute("00");
+      setCareEventEndTimePeriod("AM");
+    } finally {
+      setIsSavingCare(false);
+    }
   };
 
   const handleSaveOutdoorEvent = async (e: React.SyntheticEvent) => {
@@ -405,49 +435,54 @@ export function CareEventsPage() {
     const endDatetimeFinal = `${endDateBase}T${endTime24}:00`;
     const displayTime = formatDisplayTime(outdoorEventTimeHour, outdoorEventTimeMinute, outdoorEventTimePeriod);
 
-    if (patientId) {
-      try {
-        const created = await careEventsService.createOutdoor(
-          patientId,
-          caregiverId,
-          outdoorEventTitle,
-          startDatetime,
-          endDatetimeFinal,
-          "",
-          outdoorEventRecurrence,
-        );
-        addEvent({
-          backendId: created.id,
-          eventType: "outdoor",
-          title: created.outdoorTitle,
-          type: outdoorEventType,
-          time: displayTime,
-          startDatetime: created.startDatetime,
-          endDatetime: created.endDatetime,
-          recurrence: created.recurrence,
-        });
-        toast.success("Outdoor event scheduled successfully!");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to save outdoor event");
-        return;
+    setIsSavingOutdoor(true);
+    try {
+      if (patientId) {
+        try {
+          const created = await careEventsService.createOutdoor(
+            patientId,
+            caregiverId,
+            outdoorEventTitle,
+            startDatetime,
+            endDatetimeFinal,
+            "",
+            outdoorEventRecurrence,
+          );
+          addEvent({
+            backendId: created.id,
+            eventType: "outdoor",
+            title: created.outdoorTitle,
+            type: outdoorEventType,
+            time: displayTime,
+            startDatetime: created.startDatetime,
+            endDatetime: created.endDatetime,
+            recurrence: created.recurrence,
+          });
+          toast.success("Outdoor event scheduled successfully!");
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to save outdoor event");
+          return;
+        }
+      } else {
+        addEvent({ title: outdoorEventTitle, type: outdoorEventType, time: displayTime });
+        toast.success("Outdoor event saved locally");
       }
-    } else {
-      addEvent({ title: outdoorEventTitle, type: outdoorEventType, time: displayTime });
-      toast.success("Outdoor event saved locally");
-    }
 
-    setOutdoorEventTitle("");
-    setOutdoorEventType("Doctor Appointment");
-    setOutdoorEventTimeHour("08");
-    setOutdoorEventTimeMinute("00");
-    setOutdoorEventTimePeriod("AM");
-    setOutdoorEventStartDate(new Date().toISOString().slice(0, 10));
-    setOutdoorEventIsNeverEnding(true);
-    setOutdoorEventEndDate("");
-    setOutdoorEventRecurrence("none");
-    setOutdoorEventEndTimeHour("09");
-    setOutdoorEventEndTimeMinute("00");
-    setOutdoorEventEndTimePeriod("AM");
+      setOutdoorEventTitle("");
+      setOutdoorEventType("Doctor Appointment");
+      setOutdoorEventTimeHour("08");
+      setOutdoorEventTimeMinute("00");
+      setOutdoorEventTimePeriod("AM");
+      setOutdoorEventStartDate(getMYTDateString());
+      setOutdoorEventIsNeverEnding(true);
+      setOutdoorEventEndDate("");
+      setOutdoorEventRecurrence("none");
+      setOutdoorEventEndTimeHour("09");
+      setOutdoorEventEndTimeMinute("00");
+      setOutdoorEventEndTimePeriod("AM");
+    } finally {
+      setIsSavingOutdoor(false);
+    }
   };
 
   const TOTAL_STEPS = 7;
@@ -473,27 +508,43 @@ export function CareEventsPage() {
 
             {/* Progress Indicator */}
             <div className="flex items-center justify-between mb-6">
-              {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => (
-                <div key={step} className="flex items-center flex-1 last:flex-none">
-                  <div className="flex flex-col items-center gap-1">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      medicationStep === step
-                        ? "bg-[#4318FF] text-white scale-110"
-                        : medicationStep > step
-                        ? "bg-[#E9E3FF] text-[#4318FF]"
-                        : "bg-[#F4F7FE] text-[#A3AED0]"
-                    }`}>
-                      {medicationStep > step ? <Check className="w-3.5 h-3.5" /> : step}
-                    </div>
-                    <span className={`text-[10px] font-bold hidden sm:block ${medicationStep === step ? "text-[#4318FF]" : "text-[#A3AED0]"}`}>
-                      {STEP_LABELS[step - 1]}
-                    </span>
+              {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => {
+                const isCompleted = medicationStep > step;
+                const isCurrent = medicationStep === step;
+                const StepNode = isCompleted ? "button" : "div";
+                return (
+                  <div key={step} className="flex items-center flex-1 last:flex-none">
+                    <StepNode
+                      {...(isCompleted ? {
+                        type: "button" as const,
+                        onClick: () => handleEditField(step),
+                        title: `Go back to ${STEP_LABELS[step - 1]}`,
+                      } : {})}
+                      className={`flex flex-col items-center gap-1 ${isCompleted ? "cursor-pointer group" : ""}`}
+                    >
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        isCurrent
+                          ? "bg-[#4318FF] text-white scale-110"
+                          : isCompleted
+                          ? "bg-[#E9E3FF] text-[#4318FF] group-hover:bg-[#4318FF] group-hover:text-white group-hover:scale-110"
+                          : "bg-[#F4F7FE] text-[#A3AED0]"
+                      }`}>
+                        {isCompleted ? <Check className="w-3.5 h-3.5" /> : step}
+                      </div>
+                      <span className={`text-[10px] font-bold hidden sm:block transition-colors ${
+                        isCurrent ? "text-[#4318FF]" :
+                        isCompleted ? "text-[#4318FF] group-hover:text-[#2B3674]" :
+                        "text-[#A3AED0]"
+                      }`}>
+                        {STEP_LABELS[step - 1]}
+                      </span>
+                    </StepNode>
+                    {step < TOTAL_STEPS && (
+                      <div className={`h-0.5 flex-1 mx-1 mb-3 transition-all ${isCompleted ? "bg-[#4318FF]" : "bg-[#F4F7FE]"}`} />
+                    )}
                   </div>
-                  {step < TOTAL_STEPS && (
-                    <div className={`h-0.5 flex-1 mx-1 mb-3 transition-all ${medicationStep > step ? "bg-[#4318FF]" : "bg-[#F4F7FE]"}`} />
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); if (medicationStep === TOTAL_STEPS) handleSaveMedication(e); }} className="space-y-5">
@@ -524,7 +575,23 @@ export function CareEventsPage() {
 
                       <label className="w-full px-4 py-6 bg-[#F4F7FE] border-2 border-dashed border-[#4318FF]/30 rounded-xl text-sm font-bold text-[#4318FF] hover:bg-[#E9E3FF]/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-2">
                         {medicationImagePreview ? (
-                          <img src={medicationImagePreview} alt="Medication" className="max-h-32 rounded-lg object-contain" />
+                          <div className="relative">
+                            <img src={medicationImagePreview} alt="Medication" className="max-h-32 rounded-lg object-contain" />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                URL.revokeObjectURL(medicationImagePreview);
+                                setMedicationImage(null);
+                                setMedicationImagePreview(null);
+                              }}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                              aria-label="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
                         ) : (
                           <>
                             <Upload className="w-6 h-6" />
@@ -592,7 +659,10 @@ export function CareEventsPage() {
                                   setSelectedDrug(drug);
                                   setMedName(drug.drugName);
                                   if (!dose && drug.dosage) setDose(drug.dosage);
-                                  if (drug.manufacturerName) setManufacturerName(drug.manufacturerName);
+                                  if (drug.manufacturerName) {
+                                    manufacturerJustSelected.current = true;
+                                    setManufacturerName(drug.manufacturerName);
+                                  }
                                   if (frequency === "2 times/day" && drug.frequency) {
                                     const count = parseInt(drug.frequency.match(/\d+/)?.[0] || "2");
                                     setFrequency(drug.frequency);
@@ -639,7 +709,7 @@ export function CareEventsPage() {
                             {manufacturerSuggestions.map((name, i) => (
                               <div
                                 key={i}
-                                onClick={() => { setManufacturerName(name); setShowManufacturerDropdown(false); }}
+                                onClick={() => { manufacturerJustSelected.current = true; setManufacturerName(name); setShowManufacturerDropdown(false); }}
                                 className="px-4 py-2.5 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700"
                               >
                                 {name}
@@ -749,7 +819,11 @@ export function CareEventsPage() {
                     {/* End date toggle */}
                     <div
                       className="flex items-center justify-between p-4 bg-[#F4F7FE] rounded-xl cursor-pointer select-none"
-                      onClick={() => setIsNeverEnding(v => !v)}
+                      onClick={() => {
+                        const turningOn = isNeverEnding; // currently off → turning end date on
+                        setIsNeverEnding(v => !v);
+                        setRecurrence(turningOn ? "daily" : "none");
+                      }}
                     >
                       <div>
                         <p className="text-sm font-bold text-[#2B3674]">End date</p>
@@ -783,22 +857,27 @@ export function CareEventsPage() {
                           { value: "weekdays", label: "Weekdays (Mon – Fri)" },
                           { value: "weekly", label: `Weekly on ${getDayName(startDate)}` },
                           { value: "none", label: "No repeat" },
-                        ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => (
-                          <label
-                            key={opt.value}
-                            className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all ${recurrence === opt.value ? "bg-[#E9E3FF] border border-[#4318FF]/30" : "bg-[#F4F7FE] hover:bg-[#E9E3FF]/50"}`}
-                          >
-                            <input
-                              type="radio"
-                              name="recurrence"
-                              value={opt.value}
-                              checked={recurrence === opt.value}
-                              onChange={() => setRecurrence(opt.value)}
-                              className="accent-[#4318FF] w-4 h-4"
-                            />
-                            <span className="text-sm font-bold text-[#2B3674]">{opt.label}</span>
-                          </label>
-                        ))}
+                        ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => {
+                          // end date OFF → only "none" is selectable; end date ON → "none" is disabled
+                          const disabled = isNeverEnding ? opt.value !== "none" : opt.value === "none";
+                          return (
+                            <label
+                              key={opt.value}
+                              className={`flex items-center gap-3 p-3.5 rounded-xl transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${recurrence === opt.value ? "bg-[#E9E3FF] border border-[#4318FF]/30" : disabled ? "bg-[#F4F7FE]" : "bg-[#F4F7FE] hover:bg-[#E9E3FF]/50"}`}
+                            >
+                              <input
+                                type="radio"
+                                name="recurrence"
+                                value={opt.value}
+                                checked={recurrence === opt.value}
+                                onChange={() => setRecurrence(opt.value)}
+                                disabled={disabled}
+                                className="accent-[#4318FF] w-4 h-4"
+                              />
+                              <span className={`text-sm font-bold ${disabled ? "text-[#A3AED0]" : "text-[#2B3674]"}`}>{opt.label}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -822,7 +901,6 @@ export function CareEventsPage() {
                         onBlur={() => setTimeout(() => setShowFreqDropdown(false), 200)}
                         placeholder="e.g., 2 times/day"
                         className="w-full px-4 py-3 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
-                        autoFocus
                       />
                       <AnimatePresence>
                         {showFreqDropdown && (
@@ -909,7 +987,7 @@ export function CareEventsPage() {
                                   }}
                                   className="w-full px-2 py-2.5 bg-white border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
                                 >
-                                  {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
+                                  {MED_MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
                               </div>
                               {/* AM/PM */}
@@ -1043,8 +1121,9 @@ export function CareEventsPage() {
 
                     <div className="flex gap-3 pt-1">
                       <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button type="submit" className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]">
-                        Confirm & Save
+                      <button type="submit" disabled={isSavingMed} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        {isSavingMed && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isSavingMed ? "Saving..." : "Confirm & Save"}
                       </button>
                     </div>
                   </motion.div>
@@ -1094,15 +1173,24 @@ export function CareEventsPage() {
                       </div>
                       <button
                         type="button"
+                        disabled={deletingMedIds.has(med.remindId ?? med.id)}
                         onClick={async () => {
-                          if (med.remindId) {
-                            try { await careEventsService.deleteMedication(med.remindId, caregiverId); } catch { /* ignore */ }
+                          const key = med.remindId ?? med.id;
+                          setDeletingMedIds(prev => new Set(prev).add(key));
+                          try {
+                            if (med.remindId) {
+                              try { await careEventsService.deleteMedication(med.remindId, caregiverId); } catch { /* ignore */ }
+                            }
+                            deleteMed(med.id);
+                          } finally {
+                            setDeletingMedIds(prev => { const s = new Set(prev); s.delete(key); return s; });
                           }
-                          deleteMed(med.id);
                         }}
-                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deletingMedIds.has(med.remindId ?? med.id)
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -1197,7 +1285,11 @@ export function CareEventsPage() {
               {/* End date toggle */}
               <div
                 className="flex items-center justify-between p-4 bg-[#F4F7FE] rounded-xl cursor-pointer select-none"
-                onClick={() => setCareEventIsNeverEnding(v => !v)}
+                onClick={() => {
+                  const turningOn = careEventIsNeverEnding;
+                  setCareEventIsNeverEnding(v => !v);
+                  setCareEventRecurrence(turningOn ? "daily" : "none");
+                }}
               >
                 <div>
                   <p className="text-sm font-bold text-[#2B3674]">End date</p>
@@ -1231,22 +1323,26 @@ export function CareEventsPage() {
                     { value: "weekdays", label: "Weekdays (Mon – Fri)" },
                     { value: "weekly", label: `Weekly on ${getDayName(careEventStartDate)}` },
                     { value: "none", label: "No repeat" },
-                  ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => (
-                    <label
-                      key={opt.value}
-                      className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all ${careEventRecurrence === opt.value ? "bg-orange-50 border border-orange-400/30" : "bg-[#F4F7FE] hover:bg-orange-50/50"}`}
-                    >
-                      <input
-                        type="radio"
-                        name="careRecurrence"
-                        value={opt.value}
-                        checked={careEventRecurrence === opt.value}
-                        onChange={() => setCareEventRecurrence(opt.value)}
-                        className="accent-orange-500 w-4 h-4"
-                      />
-                      <span className="text-sm font-bold text-[#2B3674]">{opt.label}</span>
-                    </label>
-                  ))}
+                  ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => {
+                    const disabled = careEventIsNeverEnding ? opt.value !== "none" : opt.value === "none";
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-center gap-3 p-3.5 rounded-xl transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${careEventRecurrence === opt.value ? "bg-orange-50 border border-orange-400/30" : disabled ? "bg-[#F4F7FE]" : "bg-[#F4F7FE] hover:bg-orange-50/50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="careRecurrence"
+                          value={opt.value}
+                          checked={careEventRecurrence === opt.value}
+                          onChange={() => setCareEventRecurrence(opt.value)}
+                          disabled={disabled}
+                          className="accent-orange-500 w-4 h-4"
+                        />
+                        <span className={`text-sm font-bold ${disabled ? "text-[#A3AED0]" : "text-[#2B3674]"}`}>{opt.label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1344,9 +1440,11 @@ export function CareEventsPage() {
 
               <button
                 type="submit"
-                className="w-full py-4 mt-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
+                disabled={isSavingCare}
+                className="w-full py-4 mt-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Save Care Event
+                {isSavingCare && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSavingCare ? "Saving..." : "Save Care Event"}
               </button>
             </form>
           </div>
@@ -1387,15 +1485,24 @@ export function CareEventsPage() {
                       </div>
                       <button
                         type="button"
+                        disabled={deletingCareIds.has(ev.backendId ?? ev.id)}
                         onClick={async () => {
-                          if (ev.backendId && ev.eventType === "home") {
-                            try { await careEventsService.deleteHomeCare(ev.backendId, caregiverId); } catch { /* ignore */ }
+                          const key = ev.backendId ?? ev.id;
+                          setDeletingCareIds(prev => new Set(prev).add(key));
+                          try {
+                            if (ev.backendId && ev.eventType === "home") {
+                              try { await careEventsService.deleteHomeCare(ev.backendId, caregiverId); } catch { /* ignore */ }
+                            }
+                            deleteEvent(ev.id);
+                          } finally {
+                            setDeletingCareIds(prev => { const s = new Set(prev); s.delete(key); return s; });
                           }
-                          deleteEvent(ev.id);
                         }}
-                        className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                        className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deletingCareIds.has(ev.backendId ?? ev.id)
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -1483,7 +1590,11 @@ export function CareEventsPage() {
               {/* End date toggle */}
               <div
                 className="flex items-center justify-between p-4 bg-[#F4F7FE] rounded-xl cursor-pointer select-none"
-                onClick={() => setOutdoorEventIsNeverEnding(v => !v)}
+                onClick={() => {
+                  const turningOn = outdoorEventIsNeverEnding;
+                  setOutdoorEventIsNeverEnding(v => !v);
+                  setOutdoorEventRecurrence(turningOn ? "daily" : "none");
+                }}
               >
                 <div>
                   <p className="text-sm font-bold text-[#2B3674]">End date</p>
@@ -1517,22 +1628,26 @@ export function CareEventsPage() {
                     { value: "weekdays", label: "Weekdays (Mon – Fri)" },
                     { value: "weekly", label: `Weekly on ${getDayName(outdoorEventStartDate)}` },
                     { value: "none", label: "No repeat" },
-                  ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => (
-                    <label
-                      key={opt.value}
-                      className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all ${outdoorEventRecurrence === opt.value ? "bg-green-50 border border-green-400/30" : "bg-[#F4F7FE] hover:bg-green-50/50"}`}
-                    >
-                      <input
-                        type="radio"
-                        name="outdoorRecurrence"
-                        value={opt.value}
-                        checked={outdoorEventRecurrence === opt.value}
-                        onChange={() => setOutdoorEventRecurrence(opt.value)}
-                        className="accent-green-500 w-4 h-4"
-                      />
-                      <span className="text-sm font-bold text-[#2B3674]">{opt.label}</span>
-                    </label>
-                  ))}
+                  ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => {
+                    const disabled = outdoorEventIsNeverEnding ? opt.value !== "none" : opt.value === "none";
+                    return (
+                      <label
+                        key={opt.value}
+                        className={`flex items-center gap-3 p-3.5 rounded-xl transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${outdoorEventRecurrence === opt.value ? "bg-green-50 border border-green-400/30" : disabled ? "bg-[#F4F7FE]" : "bg-[#F4F7FE] hover:bg-green-50/50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="outdoorRecurrence"
+                          value={opt.value}
+                          checked={outdoorEventRecurrence === opt.value}
+                          onChange={() => setOutdoorEventRecurrence(opt.value)}
+                          disabled={disabled}
+                          className="accent-green-500 w-4 h-4"
+                        />
+                        <span className={`text-sm font-bold ${disabled ? "text-[#A3AED0]" : "text-[#2B3674]"}`}>{opt.label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1630,9 +1745,11 @@ export function CareEventsPage() {
 
               <button
                 type="submit"
-                className="w-full py-4 mt-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
+                disabled={isSavingOutdoor}
+                className="w-full py-4 mt-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Save Outdoor Event
+                {isSavingOutdoor && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSavingOutdoor ? "Saving..." : "Save Outdoor Event"}
               </button>
             </form>
           </div>
@@ -1673,15 +1790,24 @@ export function CareEventsPage() {
                       </div>
                       <button
                         type="button"
+                        disabled={deletingOutdoorIds.has(ev.backendId ?? ev.id)}
                         onClick={async () => {
-                          if (ev.backendId && ev.eventType === "outdoor") {
-                            try { await careEventsService.deleteOutdoor(ev.backendId, caregiverId); } catch { /* ignore */ }
+                          const key = ev.backendId ?? ev.id;
+                          setDeletingOutdoorIds(prev => new Set(prev).add(key));
+                          try {
+                            if (ev.backendId && ev.eventType === "outdoor") {
+                              try { await careEventsService.deleteOutdoor(ev.backendId, caregiverId); } catch { /* ignore */ }
+                            }
+                            deleteEvent(ev.id);
+                          } finally {
+                            setDeletingOutdoorIds(prev => { const s = new Set(prev); s.delete(key); return s; });
                           }
-                          deleteEvent(ev.id);
                         }}
-                        className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                        className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deletingOutdoorIds.has(ev.backendId ?? ev.id)
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>

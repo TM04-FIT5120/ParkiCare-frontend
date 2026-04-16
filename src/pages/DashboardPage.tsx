@@ -12,7 +12,9 @@ import {
   Heart,
   X,
   MapPin,
-  Trash2
+  Trash2,
+  Loader2,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
@@ -24,6 +26,7 @@ import {
 } from "@/services/caregiverEventOccurrences";
 import { dashboardService } from "@/services/dashboard";
 import { useAuth } from "@/context/AuthContext";
+import { useMedicationAlert, useMedicationAlertSnoozeScheduler } from "@/context/MedicationAlertContext";
 import { CalendarWidget } from "@/components/CalendarWidget";
 import type { CareEvent } from "@/context/careEventsContext";
 import {
@@ -32,6 +35,7 @@ import {
   getMYTDateString,
   isEventOnDay,
   occurrenceIsoForDay,
+  resolveMedicationRecurrence,
   type EventOccurrenceSourceType,
 } from "@/lib/eventRecurrence";
 
@@ -78,7 +82,7 @@ export function DashboardPage() {
   const caregiverId = user?.caregiverId ?? 0;
 
   const [newEventTitle, setNewEventTitle] = useState("");
-  const [newEventStartDate, setNewEventStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newEventStartDate, setNewEventStartDate] = useState(() => getMYTDateString());
   const [newEventIsNeverEnding, setNewEventIsNeverEnding] = useState(true);
   const [newEventEndDate, setNewEventEndDate] = useState("");
   const [newEventRecurrence, setNewEventRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
@@ -91,8 +95,16 @@ export function DashboardPage() {
   const [confirmRow, setConfirmRow] = useState<DashboardScheduleRow | null>(null);
   const [confirmMode, setConfirmMode] = useState<"complete" | "undo" | null>(null);
   const [completionKeys, setCompletionKeys] = useState<Set<string>>(() => new Set());
+  const [isCompletionsLoading, setIsCompletionsLoading] = useState(true);
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
   const [pendingCount, setPendingCount] = useState(0);
   const [overdueCount, setOverdueCount] = useState(0);
+  const [isAlertConfirming, setIsAlertConfirming] = useState(false);
+
+  const { pendingAlert, dismissAlert } = useMedicationAlert();
+  const scheduleAlertReshow = useMedicationAlertSnoozeScheduler();
 
   const [agenda, setAgenda] = useState<
     {
@@ -125,6 +137,8 @@ export function DashboardPage() {
       setCompletionKeys(next);
     } catch {
       // keep existing keys on failure
+    } finally {
+      setIsCompletionsLoading(false);
     }
   }, [caregiverId]);
 
@@ -164,6 +178,7 @@ export function DashboardPage() {
     const endDatetime = `${endDateBase}T${endTime24}:00`;
     const recurrence = newEventRecurrence !== "none" ? newEventRecurrence : null;
 
+    setIsAddingEvent(true);
     try {
       const created = await caregiverScheduleService.createSchedule(
         caregiverId,
@@ -199,7 +214,7 @@ export function DashboardPage() {
     }
 
     setNewEventTitle("");
-    setNewEventStartDate(new Date().toISOString().slice(0, 10));
+    setNewEventStartDate(getMYTDateString());
     setNewEventIsNeverEnding(true);
     setNewEventEndDate("");
     setNewEventRecurrence("none");
@@ -209,6 +224,7 @@ export function DashboardPage() {
     setNewEventEndTimeHour("09");
     setNewEventEndTimeMinute("00");
     setNewEventEndTimePeriod("AM");
+    setIsAddingEvent(false);
   };
 
   const handleTaskClick = (row: DashboardScheduleRow) => {
@@ -230,6 +246,7 @@ export function DashboardPage() {
         return n;
       });
     }
+    setIsConfirming(true);
     try {
       await upsertCaregiverEventOccurrence({
         caregiverId,
@@ -239,9 +256,13 @@ export function DashboardPage() {
         completed: wantComplete,
       });
       toast.success(confirmMode === "undo" ? "Task marked as incomplete." : "Task marked as complete!");
+      dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
+      dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
     } catch (err) {
       setCompletionKeys(snapshot);
       toast.error(err instanceof Error ? err.message : "Could not save completion");
+    } finally {
+      setIsConfirming(false);
     }
     setConfirmRow(null);
     setConfirmMode(null);
@@ -252,15 +273,89 @@ export function DashboardPage() {
     setConfirmMode(null);
   };
 
+  // ── Medication alert modal handlers ──────────────────────────────────────────
+
+  const handleAlertConfirm = async () => {
+    if (!pendingAlert || !caregiverId) return;
+  
+    const remindId = Number(pendingAlert.remindId);
+    const alertCaregiverId = Number(pendingAlert.caregiverId);
+  
+    // Match the same occurrence-key logic used by Caregiver Schedule click-confirm flow.
+    const med = patientMedications.find((m) => (m.remindId ?? m.id) === remindId);
+    const occurrenceStart = med?.time ? occurrenceIsoForDay(viewDay, med.time) : null;
+    const completionKey = occurrenceStart
+      ? completionLookupKey("MEDICATION_PLAN", remindId, occurrenceStart)
+      : null;
+  
+    // Optimistic UI update so calendar + caregiver schedule reflect completion immediately.
+    const snapshot = new Set(completionKeys);
+    if (completionKey) {
+      setCompletionKeys((prev) => {
+        const next = new Set(prev);
+        next.add(completionKey);
+        return next;
+      });
+    }
+  
+    setIsAlertConfirming(true);
+    try {
+      // Keep existing reminder-status update for pending/overdue counters.
+      await careEventsService.confirmMedication(remindId, alertCaregiverId);
+  
+      // Persist occurrence completion exactly like Yes-Complete in Caregiver Schedule.
+      if (occurrenceStart) {
+        await upsertCaregiverEventOccurrence({
+          caregiverId,
+          sourceType: "MEDICATION_PLAN",
+          sourceId: remindId,
+          occurrenceStart,
+          completed: true,
+        });
+      }
+  
+      dashboardService.getPendingTasks(caregiverId).then((t) => setPendingCount(t.length)).catch(() => {});
+      dashboardService.getOverdueTasks(caregiverId).then((t) => setOverdueCount(t.length)).catch(() => {});
+      toast.success("Medication administration confirmed!");
+      dismissAlert();
+    } catch {
+      // Roll back optimistic key if anything failed.
+      setCompletionKeys(snapshot);
+      toast.error("Could not confirm. Please try again.");
+    } finally {
+      setIsAlertConfirming(false);
+    }
+  };
+
+  const handleAlertSnooze = async () => {
+    if (!pendingAlert) return;
+    const snapshot = { ...pendingAlert };
+    dismissAlert(); // hide modal immediately so the user can continue
+    try {
+      await careEventsService.snoozeMedication(
+        Number(snapshot.remindId),
+        Number(snapshot.caregiverId),
+      );
+    } catch {
+      // non-critical — backend will retry via FCM; silent fail is acceptable
+    }
+    // Client-side safety net: re-show modal in 5 min if FCM re-fire is delayed.
+    // The backend's snooze endpoint will also re-fire FCM after 5 min, which
+    // calls dispatchAlert again — the context deduplicates by remindId.
+    scheduleAlertReshow(snapshot, 5 * 60 * 1000);
+  };
+
   const handleDeleteItem = useCallback(async (item: DashboardScheduleRow) => {
     if (!caregiverId) return;
+    setDeletingKeys((prev) => new Set(prev).add(item.rowKey));
     try {
       if (item.source === "caregiver") {
         await caregiverScheduleService.deleteSchedule(item.sourceId, caregiverId);
         setAgenda((prev) => prev.filter((a) => a.id !== item.sourceId));
       } else if (item.source === "medication") {
         await careEventsService.deleteMedication(item.sourceId, caregiverId);
-        deleteMed(item.sourceId);
+        const med = patientMedications.find((m) => (m.remindId ?? m.id) === item.sourceId);
+        if (med) deleteMed(med.id);
       } else if (item.source === "home") {
         await careEventsService.deleteHomeCare(item.sourceId, caregiverId);
         const ev = patientEventsStore.find((e) => (e.backendId ?? e.id) === item.sourceId);
@@ -273,8 +368,10 @@ export function DashboardPage() {
       toast.success("Event deleted");
     } catch {
       toast.error("Could not delete event");
+    } finally {
+      setDeletingKeys((prev) => { const s = new Set(prev); s.delete(item.rowKey); return s; });
     }
-  }, [caregiverId, patientEventsStore, deleteMed, deleteEvent]);
+  }, [caregiverId, patientMedications, patientEventsStore, deleteMed, deleteEvent]);
 
   const viewDay = getMYTDateString();
 
@@ -306,7 +403,12 @@ export function DashboardPage() {
     for (const med of patientMedications) {
       if (!med.time) continue;
       const startDate = med.startDate ?? viewDay;
-      if (!isEventOnDay(viewDay, startDate, med.endDate, med.recurrence ?? "daily")) continue;
+      const medRecurrence = resolveMedicationRecurrence(
+        med.recurrence,
+        startDate,
+        med.endDate ?? null,
+      );
+      if (!isEventOnDay(viewDay, startDate, med.endDate, medRecurrence)) continue;
       const sid = med.remindId ?? med.id;
       const occurrenceStart = occurrenceIsoForDay(viewDay, med.time);
       const rowKey = completionLookupKey("MEDICATION_PLAN", sid, occurrenceStart);
@@ -403,7 +505,17 @@ export function DashboardPage() {
             <div className="mb-8">
               <h3 className="text-xs font-bold uppercase tracking-widest text-[#A3AED0] mb-4 ml-1">Caregiver Schedule</h3>
               <div className="space-y-3">
-                {caregiverSchedule.length === 0 ? (
+                {isCompletionsLoading ? (
+                  [0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-[20px] bg-white border border-[#E0E5F2] animate-pulse">
+                      <div className="shrink-0 w-9 h-9 rounded-xl bg-[#E0E5F2]" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 bg-[#E0E5F2] rounded-md w-3/5" />
+                        <div className="h-3 bg-[#E0E5F2] rounded-md w-1/4" />
+                      </div>
+                    </div>
+                  ))
+                ) : caregiverSchedule.length === 0 ? (
                   <p className="text-sm text-[#A3AED0] text-center py-8 bg-[#F4F7FE] rounded-[20px] font-bold">No tasks scheduled.</p>
                 ) : (
                   caregiverSchedule.map((item) => {
@@ -468,10 +580,13 @@ export function DashboardPage() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleDeleteItem(item); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          disabled={deletingKeys.has(item.rowKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                           aria-label="Delete event"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deletingKeys.has(item.rowKey)
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Trash2 className="w-4 h-4" />}
                         </button>
                       </div>
                     );
@@ -515,7 +630,11 @@ export function DashboardPage() {
                 {/* End date toggle */}
                 <div
                   className="flex items-center justify-between p-4 bg-white rounded-xl cursor-pointer select-none shadow-sm"
-                  onClick={() => setNewEventIsNeverEnding(v => !v)}
+                  onClick={() => {
+                    const turningOn = newEventIsNeverEnding;
+                    setNewEventIsNeverEnding(v => !v);
+                    setNewEventRecurrence(turningOn ? "daily" : "none");
+                  }}
                 >
                   <div>
                     <p className="text-sm font-bold text-[#2B3674]">End date</p>
@@ -549,22 +668,26 @@ export function DashboardPage() {
                       { value: "weekdays", label: "Weekdays (Mon – Fri)" },
                       { value: "weekly", label: `Weekly on ${getDayName(newEventStartDate)}` },
                       { value: "none", label: "No repeat" },
-                    ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => (
-                      <label
-                        key={opt.value}
-                        className={`flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all ${newEventRecurrence === opt.value ? "bg-[#E9E3FF] border border-[#4318FF]/30" : "bg-white hover:bg-[#E9E3FF]/50 shadow-sm"}`}
-                      >
-                        <input
-                          type="radio"
-                          name="newEventRecurrence"
-                          value={opt.value}
-                          checked={newEventRecurrence === opt.value}
-                          onChange={() => setNewEventRecurrence(opt.value)}
-                          className="accent-[#4318FF] w-4 h-4"
-                        />
-                        <span className="text-sm font-bold text-[#2B3674]">{opt.label}</span>
-                      </label>
-                    ))}
+                    ] as { value: "daily" | "weekdays" | "weekly" | "none"; label: string }[]).map(opt => {
+                      const disabled = newEventIsNeverEnding ? opt.value !== "none" : opt.value === "none";
+                      return (
+                        <label
+                          key={opt.value}
+                          className={`flex items-center gap-3 p-3.5 rounded-xl transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${newEventRecurrence === opt.value ? "bg-[#E9E3FF] border border-[#4318FF]/30" : disabled ? "bg-white shadow-sm" : "bg-white hover:bg-[#E9E3FF]/50 shadow-sm"}`}
+                        >
+                          <input
+                            type="radio"
+                            name="newEventRecurrence"
+                            value={opt.value}
+                            checked={newEventRecurrence === opt.value}
+                            onChange={() => setNewEventRecurrence(opt.value)}
+                            disabled={disabled}
+                            className="accent-[#4318FF] w-4 h-4"
+                          />
+                          <span className={`text-sm font-bold ${disabled ? "text-[#A3AED0]" : "text-[#2B3674]"}`}>{opt.label}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -662,9 +785,11 @@ export function DashboardPage() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 mt-2 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] flex items-center justify-center gap-2 active:scale-[0.98]"
+                  disabled={isAddingEvent}
+                  className="w-full py-3 mt-2 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  Add Event
+                  {isAddingEvent && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isAddingEvent ? "Adding..." : "Add Event"}
                 </button>
               </form>
             </div>
@@ -835,20 +960,95 @@ export function DashboardPage() {
                   <button
                     type="button"
                     onClick={handleCancelComplete}
-                    className="flex-1 py-3 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]"
+                    disabled={isConfirming}
+                    className="flex-1 py-3 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleConfirmComplete}
-                    className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
+                    disabled={isConfirming}
+                    className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {confirmMode === "undo" ? "Yes, Undo" : "Yes, Complete"}
+                    {isConfirming && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isConfirming ? "Processing..." : confirmMode === "undo" ? "Yes, Undo" : "Yes, Complete"}
                   </button>
                 </div>
               </div>
             </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Medication Alert Modal (blocking) ──────────────────────────────────
+           Shown whenever a medication reminder FCM message arrives.
+           Blocks all UI until the caregiver confirms or snoozes.
+      ──────────────────────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {pendingAlert && (
+          <>
+            {/* Full-screen backdrop — covers everything, blocks all interaction */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999]"
+            />
+
+            {/* Modal card */}
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 24 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 24 }}
+                transition={{ type: "spring", stiffness: 300, damping: 28 }}
+                className="w-full max-w-md pointer-events-auto"
+              >
+                <div className="bg-white rounded-[24px] shadow-[0_32px_80px_rgba(0,0,0,0.25)] overflow-hidden">
+                  {/* Header band */}
+                  <div className="bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] px-8 py-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <Bell className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold text-white/70 uppercase tracking-widest">{pendingAlert.title}</p>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="px-8 py-6">
+                    <p className="text-sm text-[#A3AED0] font-bold mb-2">Time to administer:</p>
+                    <p className="text-[#2B3674] font-bold text-base leading-relaxed">{pendingAlert.body}</p>
+
+                    <p className="mt-5 text-sm text-[#A3AED0] font-bold">
+                      Please confirm or snooze to continue using the app.
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="px-8 pb-8 flex gap-4">
+                    <button
+                      type="button"
+                      onClick={handleAlertSnooze}
+                      disabled={isAlertConfirming}
+                      className="flex-1 py-4 px-6 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-base"
+                    >
+                      Snooze 5 min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAlertConfirm}
+                      disabled={isAlertConfirming}
+                      className="flex-1 py-4 px-6 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base"
+                    >
+                      {isAlertConfirming && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {isAlertConfirming ? "Confirming…" : "Confirm Administration"}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
             </div>
           </>
         )}

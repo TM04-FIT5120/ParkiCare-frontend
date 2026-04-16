@@ -28,6 +28,29 @@ export function isEventOnDay(
   return dayStr === startDate;
 }
 
+/**
+ * Resolve medication recurrence safely.
+ * - Explicit value wins.
+ * - Legacy rows with endDate === startDate are treated as one-off ("none").
+ * - Otherwise fallback to "daily" for old rows with missing recurrence.
+ */
+export function resolveMedicationRecurrence(
+  recurrence: string | undefined | null,
+  startDate: string | undefined | null,
+  endDate: string | undefined | null,
+): "none" | "daily" | "weekdays" | "weekly" {
+  const rec = (recurrence ?? "").toLowerCase();
+  if (rec === "none" || rec === "daily" || rec === "weekdays" || rec === "weekly") {
+    return rec;
+  }
+
+  if (startDate && endDate && endDate === startDate) {
+    return "none";
+  }
+
+  return "daily";
+}
+
 /** Malaysia (UTC+8) calendar date string for "today". */
 export function getMYTDateString(): string {
   const utc = Date.now() + new Date().getTimezoneOffset() * 60_000;
