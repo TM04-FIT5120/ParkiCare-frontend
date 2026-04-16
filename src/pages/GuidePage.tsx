@@ -60,7 +60,7 @@ const guideFeatures: GuideFeature[] = [
     steps: [
       { text: "Open Care Events and use Add Medication on the left. The form is a short wizard (photo → name → dosage → dates & repeat → how often & meal timing → dose times → review)." },
       {
-        text: "Optional photo of the label - only to help you fill the form on your device; it isn’t uploaded or stored by the server.",
+        text: "Optional photo of the label - ParkiCare shows a short OCR-style processing screen, then displays a suggestion panel only; it does not auto-fill the form fields.",
       },
       { text: "Enter the drug (search the list or type the name), then dosage (oral strength/quantity or another route), start/end dates, repeat, frequency, when to take (with meals), and administration times." },
       {
@@ -166,6 +166,14 @@ export function GuidePage() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-4xl xl:max-w-5xl mx-auto"
         >
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 mb-6 flex items-start gap-3">
+            <Bell className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-sm sm:text-base text-amber-800 leading-relaxed">
+              <span className="font-semibold">To receive medication alerts on iPhone, iPad, or Android:</span> add ParkiCare to your Home Screen.{" "}
+              Tap <span className="font-semibold">Share</span> &rarr; <span className="font-semibold">Add to Home Screen</span>, then open the app from there and allow notifications when prompted.
+            </p>
+          </div>
+
           {guideFeatures.map((feature, index) => (
             <motion.div
               key={feature.id}

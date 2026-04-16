@@ -16,6 +16,7 @@ const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day"];
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 const MED_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+const OCR_LOADING_MS = 5000;
 
 function getDayName(dateStr: string): string {
   if (!dateStr) return "selected day";
@@ -71,6 +72,7 @@ export function CareEventsPage() {
   const [medicationImagePreview, setMedicationImagePreview] = useState<string | null>(null);
   // OCR result floating panel
   const [ocrResult, setOcrResult] = useState<{ name: string; dose: string; quantity: number; error?: boolean } | null>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [dosageMismatchAcked, setDosageMismatchAcked] = useState(false);
   // Dropdowns
   const [showMedsDropdown, setShowMedsDropdown] = useState(false);
@@ -80,6 +82,7 @@ export function CareEventsPage() {
   const drugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerJustSelected = useRef(false);
+  const ocrLoadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Care Event state ---
   const [careEventTitle, setCareEventTitle] = useState("");
@@ -197,6 +200,9 @@ export function CareEventsPage() {
   // Revoke image preview URL on unmount
   useEffect(() => {
     return () => {
+      if (ocrLoadingTimer.current) {
+        clearTimeout(ocrLoadingTimer.current);
+      }
       if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     };
   }, [medicationImagePreview]);
@@ -210,12 +216,23 @@ export function CareEventsPage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (ocrLoadingTimer.current) {
+      clearTimeout(ocrLoadingTimer.current);
+      ocrLoadingTimer.current = null;
+    }
     if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     setMedicationImage(file);
     setMedicationImagePreview(URL.createObjectURL(file));
+    setOcrResult(null);
+    setIsOcrLoading(false);
+    setDosageMismatchAcked(false);
   };
 
   const resetMedicationForm = () => {
+    if (ocrLoadingTimer.current) {
+      clearTimeout(ocrLoadingTimer.current);
+      ocrLoadingTimer.current = null;
+    }
     setMedicationStep(1);
     setMedName("");
     setSelectedDrug(null);
@@ -236,6 +253,7 @@ export function CareEventsPage() {
     setMedicationImage(null);
     setMedicationImagePreview(null);
     setOcrResult(null);
+    setIsOcrLoading(false);
     setDosageMismatchAcked(false);
   };
 
@@ -318,8 +336,8 @@ export function CareEventsPage() {
   };
 
   const MOCK_OCR_DATA = [
-    { pattern: /madopar/i, name: "MADOPAR ROCHE TABLET 250MG", dose: "250mg", quantity: 1 },
-    { pattern: /comtan/i,  name: "COMTAN TABLET 200MG",        dose: "200mg", quantity: 1 },
+    { pattern: /madopar/i, name: "MADOPAR", dose: "250mg", quantity: 0 },
+    { pattern: /comtan/i,  name: "COMTAN TABLET 200MG",        dose: "200mg", quantity: 0 },
   ];
 
   const handleNextStep = () => {
@@ -327,14 +345,21 @@ export function CareEventsPage() {
       if (medicationImage) {
         const fileName = medicationImage.name.toLowerCase();
         const match = MOCK_OCR_DATA.find(d => d.pattern.test(fileName));
-        if (match) {
-          setMedName(match.name);
-          setDose(match.dose);
-          setQuantity(match.quantity);
-          setOcrResult({ name: match.name, dose: match.dose, quantity: match.quantity });
-        } else {
-          setOcrResult({ name: "", dose: "", quantity: 0, error: true });
+        if (ocrLoadingTimer.current) {
+          clearTimeout(ocrLoadingTimer.current);
         }
+        setOcrResult(null);
+        setIsOcrLoading(true);
+        setDosageMismatchAcked(false);
+        ocrLoadingTimer.current = setTimeout(() => {
+          setOcrResult(
+            match
+              ? { name: match.name, dose: match.dose, quantity: match.quantity }
+              : { name: "", dose: "", quantity: 0, error: true },
+          );
+          setIsOcrLoading(false);
+          ocrLoadingTimer.current = null;
+        }, OCR_LOADING_MS);
       }
     }
     if (medicationStep === 2 && !medName.trim()) {
@@ -1188,7 +1213,7 @@ export function CareEventsPage() {
 
           {/* OCR Result Floating Panel */}
           <AnimatePresence>
-            {ocrResult && medicationStep >= 2 && medicationStep <= 7 && (
+            {(isOcrLoading || ocrResult) && medicationStep >= 2 && medicationStep <= 7 && (
               <motion.div
                 key="ocr-panel"
                 initial={{ opacity: 0, y: -12 }}
@@ -1199,7 +1224,14 @@ export function CareEventsPage() {
               >
                 <button
                   type="button"
-                  onClick={() => setOcrResult(null)}
+                  onClick={() => {
+                    if (ocrLoadingTimer.current) {
+                      clearTimeout(ocrLoadingTimer.current);
+                      ocrLoadingTimer.current = null;
+                    }
+                    setIsOcrLoading(false);
+                    setOcrResult(null);
+                  }}
                   className="absolute top-3 right-3 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-10"
                   aria-label="Close OCR result"
                 >
@@ -1207,13 +1239,27 @@ export function CareEventsPage() {
                 </button>
 
                 <h3 className="text-sm font-bold text-[#2B3674] mb-3 flex items-center gap-2">
-                  {ocrResult.error
+                  {isOcrLoading
+                    ? <Loader2 className="w-4 h-4 text-[#4318FF] animate-spin" />
+                    : ocrResult?.error
                     ? <AlertCircle className="w-4 h-4 text-orange-500" />
                     : <Search className="w-4 h-4 text-[#4318FF]" />}
                   Photo Recognition Result
                 </h3>
 
-                {ocrResult.error ? (
+                {isOcrLoading ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 bg-[#EEF2FF] border border-[#C7D2FE] rounded-xl px-4 py-4">
+                      <Loader2 className="w-5 h-5 text-[#4318FF] shrink-0 mt-0.5 animate-spin" />
+                      <div className="text-sm text-[#2B3674]">
+                        <p className="font-bold">Scanning image and extracting text...</p>
+                        <p className="mt-1 text-xs leading-relaxed text-[#707EAE]">
+                          ParkiCare is checking the uploaded medication photo. Suggested details will appear here shortly.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : ocrResult?.error ? (
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-4">
                       <AlertCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
@@ -1230,15 +1276,15 @@ export function CareEventsPage() {
                     <div className="space-y-2.5">
                       <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
                         <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Name</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.name}</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.name ?? ""}</span>
                       </div>
                       <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
                         <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Dosage</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.dose}</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.dose ?? ""}</span>
                       </div>
                       <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
                         <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Quantity</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.quantity} unit(s) per dose</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.quantity ?? ""} unit(s) per dose</span>
                       </div>
                     </div>
 
