@@ -644,6 +644,7 @@ export function CareEventsPage() {
                             : "Type to search medications from the database."}
                         </p>
                       </div>
+                      <p className="text-xs text-gray-400 mt-1">Tip: Common Parkinson's medications include Levodopa, Madopar, and Entacapone</p>
                       <AnimatePresence>
                         {showMedsDropdown && drugSearchResults.length > 0 && (
                           <motion.div
