@@ -199,6 +199,13 @@ export function RegisterPage() {
                   />
                 </div>
 
+                <div className="flex items-start gap-2 px-1 pb-1">
+                  <Info className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                    Password must be 6–20 characters long.
+                  </p>
+                </div>
+
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <ShieldCheck className="w-5 h-5 text-slate-400 focus-within:text-indigo-600 transition-colors" />

@@ -69,6 +69,9 @@ export function CareEventsPage() {
   // Image upload (client-side only)
   const [medicationImage, setMedicationImage] = useState<File | null>(null);
   const [medicationImagePreview, setMedicationImagePreview] = useState<string | null>(null);
+  // OCR result floating panel
+  const [ocrResult, setOcrResult] = useState<{ name: string; dose: string; quantity: number; error?: boolean } | null>(null);
+  const [dosageMismatchAcked, setDosageMismatchAcked] = useState(false);
   // Dropdowns
   const [showMedsDropdown, setShowMedsDropdown] = useState(false);
   const [drugSearchResults, setDrugSearchResults] = useState<DrugBase[]>([]);
@@ -232,6 +235,8 @@ export function CareEventsPage() {
     if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     setMedicationImage(null);
     setMedicationImagePreview(null);
+    setOcrResult(null);
+    setDosageMismatchAcked(false);
   };
 
   const handleSaveMedication = async (e: React.SyntheticEvent) => {
@@ -312,9 +317,25 @@ export function CareEventsPage() {
     }
   };
 
+  const MOCK_OCR_DATA = [
+    { pattern: /madopar/i, name: "MADOPAR ROCHE TABLET 250MG", dose: "250mg", quantity: 1 },
+    { pattern: /comtan/i,  name: "COMTAN TABLET 200MG",        dose: "200mg", quantity: 1 },
+  ];
+
   const handleNextStep = () => {
     if (medicationStep === 1) {
-      // Image upload is optional. Always allow proceeding
+      if (medicationImage) {
+        const fileName = medicationImage.name.toLowerCase();
+        const match = MOCK_OCR_DATA.find(d => d.pattern.test(fileName));
+        if (match) {
+          setMedName(match.name);
+          setDose(match.dose);
+          setQuantity(match.quantity);
+          setOcrResult({ name: match.name, dose: match.dose, quantity: match.quantity });
+        } else {
+          setOcrResult({ name: "", dose: "", quantity: 0, error: true });
+        }
+      }
     }
     if (medicationStep === 2 && !medName.trim()) {
       toast.error("Please enter medication name");
@@ -573,9 +594,9 @@ export function CareEventsPage() {
                         </div>
                       </div>
 
-                      <label className="w-full px-4 py-6 bg-[#F4F7FE] border-2 border-dashed border-[#4318FF]/30 rounded-xl text-sm font-bold text-[#4318FF] hover:bg-[#E9E3FF]/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-2">
+                      <label className="w-full px-4 py-6 bg-[#F4F7FE] border-2 border-dashed border-[#4318FF]/30 rounded-xl text-sm font-bold text-[#4318FF] hover:bg-[#E9E3FF]/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 overflow-visible">
                         {medicationImagePreview ? (
-                          <div className="relative">
+                          <div className="relative overflow-visible">
                             <img src={medicationImagePreview} alt="Medication" className="max-h-32 rounded-lg object-contain" />
                             <button
                               type="button"
@@ -586,10 +607,10 @@ export function CareEventsPage() {
                                 setMedicationImage(null);
                                 setMedicationImagePreview(null);
                               }}
-                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                              className="absolute -top-3 -right-3 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-10"
                               aria-label="Remove image"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
@@ -1062,7 +1083,7 @@ export function CareEventsPage() {
                     </div>
 
                     {/* Dosage */}
-                    <div onClick={() => handleEditField(3)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
+                    <div onClick={() => handleEditField(3)} className={`p-4 rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group ${ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() ? "bg-[#FFF7ED] border border-orange-300" : "bg-[#F4F7FE]"}`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Dosage</p>
@@ -1074,6 +1095,16 @@ export function CareEventsPage() {
                         </div>
                         <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
                       </div>
+                      {ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
+                        <div className="mt-2 flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                          <AlertCircle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                          <div className="text-xs text-orange-700">
+                            <p className="font-bold">Dosage mismatch detected</p>
+                            <p className="mt-0.5">Photo recognition: <strong>{ocrResult.dose}</strong> → Your input: <strong>{dose}</strong></p>
+                            <p className="mt-0.5 text-orange-500">Please verify the dosage is correct before saving.</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Schedule */}
@@ -1120,9 +1151,27 @@ export function CareEventsPage() {
                       </div>
                     </div>
 
+                    {ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
+                      <label className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={dosageMismatchAcked}
+                          onChange={(e) => setDosageMismatchAcked(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-orange-500 shrink-0"
+                        />
+                        <span className="text-xs text-orange-700 leading-relaxed">
+                          I have reviewed the dosage difference (Photo: <strong>{ocrResult.dose}</strong> vs Entered: <strong>{dose}</strong>) and confirm my input is correct.
+                        </span>
+                      </label>
+                    )}
+
                     <div className="flex gap-3 pt-1">
                       <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button type="submit" disabled={isSavingMed} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={isSavingMed || (ocrResult != null && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && !dosageMismatchAcked)}
+                        className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
                         {isSavingMed && <Loader2 className="w-4 h-4 animate-spin" />}
                         {isSavingMed ? "Saving..." : "Confirm & Save"}
                       </button>
@@ -1133,6 +1182,74 @@ export function CareEventsPage() {
               </AnimatePresence>
             </form>
           </div>
+
+          {/* Right column wrapper */}
+          <div className="space-y-4">
+
+          {/* OCR Result Floating Panel */}
+          <AnimatePresence>
+            {ocrResult && medicationStep >= 2 && medicationStep <= 7 && (
+              <motion.div
+                key="ocr-panel"
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.25 }}
+                className="relative bg-gradient-to-br from-[#F6F4FF] to-white rounded-[20px] p-5 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border border-[#E9E3FF]"
+              >
+                <button
+                  type="button"
+                  onClick={() => setOcrResult(null)}
+                  className="absolute top-3 right-3 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-10"
+                  aria-label="Close OCR result"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <h3 className="text-sm font-bold text-[#2B3674] mb-3 flex items-center gap-2">
+                  {ocrResult.error
+                    ? <AlertCircle className="w-4 h-4 text-orange-500" />
+                    : <Search className="w-4 h-4 text-[#4318FF]" />}
+                  Photo Recognition Result
+                </h3>
+
+                {ocrResult.error ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-4">
+                      <AlertCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                      <div className="text-sm text-orange-700">
+                        <p className="font-bold">Unable to recognise medication</p>
+                        <p className="mt-1 text-xs leading-relaxed text-orange-600">
+                          The image is unclear or does not contain valid medication information. Please fill in the details manually using the form on the left.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
+                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Name</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
+                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Dosage</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.dose}</span>
+                      </div>
+                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
+                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Quantity</span>
+                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult.quantity} unit(s) per dose</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-[#A3AED0] mt-3 leading-relaxed">
+                      Please verify the information above matches your medication. You can edit any field in the form on the left.
+                    </p>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Medication List */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none">
@@ -1199,6 +1316,8 @@ export function CareEventsPage() {
               )}
             </div>
           </div>
+
+          </div>{/* End right column wrapper */}
 
         </div>
 
