@@ -1284,7 +1284,11 @@ export function CareEventsPage() {
                       </div>
                       <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
                         <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Quantity</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.quantity ?? ""} unit(s) per dose</span>
+                        {ocrResult?.quantity ? (
+                          <span className="text-sm font-bold text-[#2B3674]">{ocrResult.quantity} unit(s) per dose</span>
+                        ) : (
+                          <span className="text-sm font-bold text-orange-500">No valid quantity value detected</span>
+                        )}
                       </div>
                     </div>
 
