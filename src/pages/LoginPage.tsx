@@ -231,9 +231,6 @@ export function LoginPage() {
                   <span className="text-sm font-medium text-slate-700 select-none">Remember ID</span>
                 </label>
 
-                <button type="button" className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4 transition-all">
-                  Forgot password?
-                </button>
               </motion.div>
 
               <motion.div variants={itemVariants} className="pt-2 relative z-10">

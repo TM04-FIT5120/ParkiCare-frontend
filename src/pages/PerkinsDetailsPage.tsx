@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity, AlertCircle, FileText, Play, Brain, ShieldAlert,
@@ -375,7 +375,17 @@ export function PerkinsDetailsPage() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [activeSection, setActiveSection] = useState<Section | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const sections = useSections(navigate);
+
+  useEffect(() => {
+    if (location.hash === '#miasa-support') {
+      const timer = setTimeout(() => {
+        document.getElementById('miasa-support')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [location.hash]);
 
   return (
     <div className="container mx-auto px-4 py-8 space-y-8">
@@ -520,6 +530,122 @@ export function PerkinsDetailsPage() {
           ))}
         </div>
       </motion.div>
+
+      {/* ── MIASA Malaysia Mental Health Support Card ───────────────────────── */}
+      <motion.section
+        id="miasa-support"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="bg-gradient-to-br from-[#4318FF] to-[#8B5CF6] rounded-[20px] overflow-hidden shadow-[0_18px_40px_rgba(67,24,255,0.25)]"
+      >
+        <div className="p-6 sm:p-8 md:p-10 flex flex-col md:flex-row gap-6 md:gap-10">
+          {/* Left: Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                <Phone className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white/60 uppercase tracking-widest">Mental Health Support</p>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-white">MIASA Malaysia</h2>
+              </div>
+            </div>
+
+            <p className="text-white/80 text-sm leading-relaxed mb-4">
+              MIASA (Mental Illness Awareness &amp; Support Association) is a Malaysian NGO dedicated to breaking mental health stigma and providing crisis support, counselling, and peer support services — free and subsidised for those in need.
+            </p>
+
+            <div className="space-y-2 mb-5">
+              {[
+                ["Crisis Intervention", "Immediate support for those in acute distress"],
+                ["Counselling & Therapy", "Mental health assessments and psychological support"],
+                ["Peer Support", "One-on-one peer support and group sessions"],
+                ["B40 Support Program", "Free and subsidised services for lower-income individuals"],
+              ].map(([title, desc]) => (
+                <div key={title} className="flex items-start gap-2">
+                  <span className="text-white/60 mt-1 text-xs">●</span>
+                  <p className="text-sm text-white/80"><span className="font-bold text-white">{title}:</span> {desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs text-white/70">
+              <span className="bg-white/10 px-3 py-1 rounded-full font-bold">📧 info.miasa@gmail.com</span>
+              <span className="bg-white/10 px-3 py-1 rounded-full font-bold">🌐 miasa.org.my</span>
+            </div>
+          </div>
+
+          {/* Right: Contact Actions */}
+          <div className="md:w-72 shrink-0 space-y-3">
+            <h3 className="text-sm font-bold text-white/60 uppercase tracking-widest mb-3">Contact Now</h3>
+
+            {/* Crisis Hotline */}
+            <a
+              href="tel:1800180066"
+              className="flex items-center gap-4 p-4 bg-white rounded-[16px] group hover:bg-[#F4F7FE] transition-all active:scale-[0.98] shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
+            >
+              <div className="w-11 h-11 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <Phone className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wide">Crisis Hotline</p>
+                <p className="text-base font-extrabold text-[#2B3674]">1800 180 066</p>
+                <p className="text-xs text-[#A3AED0] font-medium">Free call · Tap to call now</p>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center group-hover:bg-red-600 transition-colors">
+                <Phone className="w-4 h-4 text-white" />
+              </div>
+            </a>
+
+            {/* WhatsApp Crisis */}
+            <a
+              href="tel:0397656088"
+              className="flex items-center gap-4 p-4 bg-white rounded-[16px] group hover:bg-[#F4F7FE] transition-all active:scale-[0.98] shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
+            >
+              <div className="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                <Phone className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wide">Crisis WhatsApp Line</p>
+                <p className="text-base font-extrabold text-[#2B3674]">03-9765 6088</p>
+                <p className="text-xs text-[#A3AED0] font-medium">Tap to call now</p>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center group-hover:bg-green-600 transition-colors">
+                <Phone className="w-4 h-4 text-white" />
+              </div>
+            </a>
+
+            {/* General Enquiry */}
+            <a
+              href="tel:+60379321409"
+              className="flex items-center gap-4 p-4 bg-white rounded-[16px] group hover:bg-[#F4F7FE] transition-all active:scale-[0.98] shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
+            >
+              <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                <Phone className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wide">General Enquiry</p>
+                <p className="text-base font-extrabold text-[#2B3674]">+603-7932 1409</p>
+                <p className="text-xs text-[#A3AED0] font-medium">Tap to call now</p>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                <Phone className="w-4 h-4 text-white" />
+              </div>
+            </a>
+
+            <a
+              href="https://miasa.org.my/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold text-sm rounded-[16px] transition-all active:scale-[0.98]"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Visit miasa.org.my
+            </a>
+          </div>
+        </div>
+      </motion.section>
 
       {/* ── Section Modal ────────────────────────────────────────────────────── */}
       <AnimatePresence>

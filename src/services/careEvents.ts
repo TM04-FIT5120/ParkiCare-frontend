@@ -43,6 +43,50 @@ export interface OutdoorScheduleResponse {
   isPinned?: number;
 }
 
+// --- Medication report types ---
+export interface DailyMedicationDTO {
+  date: string;
+  drugId: number;
+  drugName: string;
+  targetFrequency: number;
+  actualCount: number;
+  completionRate: number;
+  status: "SUCCESS" | "INCOMPLETE";
+}
+
+export interface DailySummaryDTO {
+  date: string;
+  targetCount: number;
+  actualCount: number;
+  completionRate: number;
+  status: "SUCCESS" | "INCOMPLETE";
+}
+
+export interface MedicationSummaryDTO {
+  drugId: number;
+  drugName: string;
+  targetCount: number;
+  actualCount: number;
+  completionRate: number;
+  successDays: number;
+  incompleteDays: number;
+}
+
+export interface MedicationReportDTO {
+  patientId: number;
+  reportMode: string;
+  startDate: string;
+  endDate: string;
+  lastExportTime: string | null;
+  currentExportTime: string;
+  totalTargetCount: number;
+  totalActualCount: number;
+  overallCompletionRate: number;
+  medicationSummaries: MedicationSummaryDTO[];
+  dailySummaries: DailySummaryDTO[];
+  dailyBreakdown: DailyMedicationDTO[];
+}
+
 export const careEventsService = {
   // Medications
   createMedication: async (
@@ -213,6 +257,36 @@ export const careEventsService = {
 
   toggleOutdoorPin: async (id: number, caregiverId: number): Promise<OutdoorScheduleResponse> => {
     const res = await api.patch<OutdoorScheduleResponse>(`/outdoor/${id}/pin?caregiverId=${caregiverId}`);
+    return res.data;
+  },
+
+  // Medication report
+  getMedicationReport: async (
+    patientId: number,
+    mode: "custom" | "sinceLastExport",
+    startDate?: string,
+    endDate?: string,
+  ): Promise<MedicationReportDTO> => {
+    const params: Record<string, string> = { mode };
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    const res = await api.get<MedicationReportDTO>(`/report/${patientId}`, { params });
+    return res.data;
+  },
+
+  downloadMedicationReportPdf: async (
+    patientId: number,
+    mode: "custom" | "sinceLastExport",
+    startDate?: string,
+    endDate?: string,
+  ): Promise<Blob> => {
+    const params: Record<string, string> = { mode };
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    const res = await api.get<Blob>(`/report/${patientId}/pdf`, {
+      params,
+      responseType: "blob",
+    });
     return res.data;
   },
 };

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Pill, Clock, Plus, Info, Check, Search, AlertCircle, Trash2, CalendarHeart, Upload, MapPin, Calendar, X, Loader2 } from "lucide-react";
+import { Pill, Clock, Plus, Info, Check, Search, AlertCircle, Trash2, CalendarHeart, Upload, MapPin, Calendar, X, Loader2, Camera, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
 import { useAuth } from "@/context/AuthContext";
 import { drugsService, type DrugBase } from "@/services/drugs";
 import { careEventsService } from "@/services/careEvents";
+import { scanMedicineLabel } from "@/services/ocr";
 import { HistorySection } from "@/components/HistorySection";
 import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString } from "@/lib/eventRecurrence";
@@ -16,7 +17,6 @@ const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day"];
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 const MED_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
-const OCR_LOADING_MS = 5000;
 
 function getDayName(dateStr: string): string {
   if (!dateStr) return "selected day";
@@ -71,7 +71,8 @@ export function CareEventsPage() {
   const [medicationImage, setMedicationImage] = useState<File | null>(null);
   const [medicationImagePreview, setMedicationImagePreview] = useState<string | null>(null);
   // OCR result floating panel
-  const [ocrResult, setOcrResult] = useState<{ name: string; dose: string; quantity: number; error?: boolean } | null>(null);
+  const [ocrResult, setOcrResult] = useState<{ name: string; dose: string; quantity: number; manufacturer: string; error?: boolean } | null>(null);
+  const [inputMode, setInputMode] = useState<"choice" | "ocr" | "manual">("choice");
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [dosageMismatchAcked, setDosageMismatchAcked] = useState(false);
   // Dropdowns
@@ -79,10 +80,12 @@ export function CareEventsPage() {
   const [drugSearchResults, setDrugSearchResults] = useState<DrugBase[]>([]);
   const [showFreqDropdown, setShowFreqDropdown] = useState(false);
   const [medicationStep, setMedicationStep] = useState(1);
+  const [formInteractive, setFormInteractive] = useState(false);
+  const [showPreMedWarning, setShowPreMedWarning] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const drugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerJustSelected = useRef(false);
-  const ocrLoadingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Care Event state ---
   const [careEventTitle, setCareEventTitle] = useState("");
@@ -200,9 +203,6 @@ export function CareEventsPage() {
   // Revoke image preview URL on unmount
   useEffect(() => {
     return () => {
-      if (ocrLoadingTimer.current) {
-        clearTimeout(ocrLoadingTimer.current);
-      }
       if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     };
   }, [medicationImagePreview]);
@@ -216,10 +216,6 @@ export function CareEventsPage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (ocrLoadingTimer.current) {
-      clearTimeout(ocrLoadingTimer.current);
-      ocrLoadingTimer.current = null;
-    }
     if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     setMedicationImage(file);
     setMedicationImagePreview(URL.createObjectURL(file));
@@ -229,11 +225,8 @@ export function CareEventsPage() {
   };
 
   const resetMedicationForm = () => {
-    if (ocrLoadingTimer.current) {
-      clearTimeout(ocrLoadingTimer.current);
-      ocrLoadingTimer.current = null;
-    }
     setMedicationStep(1);
+    setInputMode("choice");
     setMedName("");
     setSelectedDrug(null);
     setManufacturerName("");
@@ -255,6 +248,8 @@ export function CareEventsPage() {
     setOcrResult(null);
     setIsOcrLoading(false);
     setDosageMismatchAcked(false);
+    setFormInteractive(false);
+    setShowConfirmModal(false);
   };
 
   const handleSaveMedication = async (e: React.SyntheticEvent) => {
@@ -335,40 +330,48 @@ export function CareEventsPage() {
     }
   };
 
-  const MOCK_OCR_DATA = [
-    { pattern: /madopar/i, name: "MADOPAR", dose: "250mg", quantity: 0 },
-    { pattern: /comtan/i,  name: "COMTAN TABLET 200MG",        dose: "200mg", quantity: 0 },
-  ];
-
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (medicationStep === 1) {
-      if (medicationImage) {
-        const fileName = medicationImage.name.toLowerCase();
-        const match = MOCK_OCR_DATA.find(d => d.pattern.test(fileName));
-        if (ocrLoadingTimer.current) {
-          clearTimeout(ocrLoadingTimer.current);
+      if (inputMode === "choice") return;
+
+      if (inputMode === "ocr") {
+        // Phase A → trigger OCR, don't advance yet
+        if (!ocrResult && !isOcrLoading) {
+          if (!medicationImage) {
+            toast.error("Please select or take a photo first");
+            return;
+          }
+          setIsOcrLoading(true);
+          setDosageMismatchAcked(false);
+          try {
+            const result = await scanMedicineLabel(medicationImage);
+            setOcrResult({ name: result.drugName, dose: result.dosage, quantity: 0, manufacturer: result.manufacturer });
+            if (result.drugName) setMedName(result.drugName);
+            if (result.dosage) setDose(result.dosage);
+            if (result.manufacturer) { manufacturerJustSelected.current = true; setManufacturerName(result.manufacturer); }
+          } catch {
+            setOcrResult({ name: "", dose: "", quantity: 0, manufacturer: "", error: true });
+          } finally {
+            setIsOcrLoading(false);
+          }
+          return; // stay on step 1 so user can review/edit pre-filled fields
         }
-        setOcrResult(null);
-        setIsOcrLoading(true);
-        setDosageMismatchAcked(false);
-        ocrLoadingTimer.current = setTimeout(() => {
-          setOcrResult(
-            match
-              ? { name: match.name, dose: match.dose, quantity: match.quantity }
-              : { name: "", dose: "", quantity: 0, error: true },
-          );
-          setIsOcrLoading(false);
-          ocrLoadingTimer.current = null;
-        }, OCR_LOADING_MS);
+      }
+
+      // Both manual and OCR phase B: validate fields before advancing
+      if (!medName.trim()) {
+        toast.error("Please enter medication name");
+        return;
+      }
+      if (!dose.trim()) {
+        toast.error("Please enter the dosage (e.g. 100mg)");
+        return;
       }
     }
-    if (medicationStep === 2 && !medName.trim()) {
-      toast.error("Please enter medication name");
-      return;
-    }
-    if (medicationStep === 3) {
-      if (dosagePart === "oral" && (!dose.trim() || quantity === "")) {
-        toast.error("Please fill in both dosage and quantity for oral medication");
+
+    if (medicationStep === 2) {
+      if (dosagePart === "oral" && quantity === "") {
+        toast.error("Please enter the quantity for oral medication");
         return;
       }
       if (dosagePart === "other" && !intakeMethod.trim()) {
@@ -376,7 +379,7 @@ export function CareEventsPage() {
         return;
       }
     }
-    if (medicationStep === 4) {
+    if (medicationStep === 3) {
       if (!startDate) {
         toast.error("Please select a start date");
         return;
@@ -386,16 +389,18 @@ export function CareEventsPage() {
         return;
       }
     }
-    if (medicationStep === 5 && !frequency.trim()) {
+    if (medicationStep === 4 && !frequency.trim()) {
       toast.error("Please select frequency");
       return;
     }
-    if (medicationStep === 6) {
+    if (medicationStep === 5) {
       const validTimes = medTimes.filter(t => t.hour && t.minute && t.period);
       if (validTimes.length === 0) {
         toast.error("Please set at least one administration time");
         return;
       }
+      setShowConfirmModal(true);
+      return;
     }
     setMedicationStep(s => s + 1);
   };
@@ -531,8 +536,8 @@ export function CareEventsPage() {
     }
   };
 
-  const TOTAL_STEPS = 7;
-  const STEP_LABELS = ["Photo", "Name", "Dosage", "Schedule", "Frequency", "Time", "Review"];
+  const TOTAL_STEPS = 5;
+  const STEP_LABELS = ["Medication", "Route & Dose", "Schedule", "Frequency", "Time"];
 
   return (
     <div className="pb-10">
@@ -547,12 +552,60 @@ export function CareEventsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Medication Form */}
-          <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
+          <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative overflow-hidden">
             <h2 className="text-xl font-bold text-[#2B3674] mb-6 flex items-center gap-2">
               <Plus className="w-5 h-5 text-[#4318FF]" /> Add Medication
             </h2>
 
-            {/* Progress Indicator */}
+            {/* Pre-Medication Safety Warning Overlay */}
+            <AnimatePresence>
+              {showPreMedWarning && (
+                <motion.div
+                  key="pre-med-warning"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-20 bg-white/95 backdrop-blur-sm rounded-[20px] flex flex-col items-center justify-center p-6 sm:p-8 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                    <AlertCircle className="w-8 h-8 text-amber-500" />
+                  </div>
+                  <h3 className="text-lg font-bold text-[#2B3674] mb-2">Medication Safety Notice</h3>
+                  <p className="text-sm text-[#A3AED0] leading-relaxed mb-6 max-w-xs">
+                    Please be cautious when adding medications. Always verify the medication name, dosage, and frequency are correct before confirming.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowPreMedWarning(false); setFormInteractive(true); }}
+                    className="w-full max-w-xs py-3.5 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]"
+                  >
+                    I Understand, Proceed
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* CTA shown before form is opened */}
+            {!formInteractive && (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="w-14 h-14 rounded-full bg-[#E9E3FF] flex items-center justify-center mb-4">
+                  <Pill className="w-7 h-7 text-[#4318FF]" />
+                </div>
+                <p className="text-sm text-[#A3AED0] leading-relaxed mb-5 max-w-xs">
+                  Add medications to the care plan with scheduled reminders and administration times.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPreMedWarning(true)}
+                  className="px-6 py-3.5 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98] flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Add Medication
+                </button>
+              </div>
+            )}
+
+            {/* Progress Indicator + Form — only when form is interactive */}
+            {formInteractive && <>
             <div className="flex items-center justify-between mb-6">
               {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((step) => {
                 const isCompleted = medicationStep > step;
@@ -593,217 +646,196 @@ export function CareEventsPage() {
               })}
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); if (medicationStep === TOTAL_STEPS) handleSaveMedication(e); }} className="space-y-5">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-5">
               <AnimatePresence mode="wait">
 
-                {/* Step 1: Image Upload */}
+                {/* Step 1: Medication — choice / OCR / manual */}
                 {medicationStep === 1 && (
                   <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
-                    <div>
-                      <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
-                        Medication Photo <span className="text-[#A3AED0] normal-case font-normal">(optional)</span>
-                      </label>
 
-                      <div className="space-y-3 mb-4">
+                    {/* Choice screen */}
+                    {inputMode === "choice" && (
+                      <>
+                        <div>
+                          <p className="text-sm font-bold text-[#2B3674] mb-1">How would you like to add the medication?</p>
+                          <p className="text-xs text-[#A3AED0]">Choose a method to enter medication details</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <button
+                            type="button"
+                            onClick={() => setInputMode("ocr")}
+                            className="p-5 bg-[#F4F7FE] hover:bg-[#E9E3FF] border-2 border-transparent hover:border-[#4318FF]/30 rounded-xl flex flex-col items-center gap-3 text-center transition-all group active:scale-[0.98]"
+                          >
+                            <div className="w-12 h-12 rounded-xl bg-[#E9E3FF] group-hover:bg-[#4318FF] flex items-center justify-center transition-colors">
+                              <Camera className="w-6 h-6 text-[#4318FF] group-hover:text-white transition-colors" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#2B3674]">Scan Label (OCR)</p>
+                              <p className="text-xs text-[#A3AED0] mt-0.5">Use camera or upload a photo</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInputMode("manual")}
+                            className="p-5 bg-[#F4F7FE] hover:bg-[#E9E3FF] border-2 border-transparent hover:border-[#4318FF]/30 rounded-xl flex flex-col items-center gap-3 text-center transition-all group active:scale-[0.98]"
+                          >
+                            <div className="w-12 h-12 rounded-xl bg-[#E9E3FF] group-hover:bg-[#4318FF] flex items-center justify-center transition-colors">
+                              <Pencil className="w-6 h-6 text-[#4318FF] group-hover:text-white transition-colors" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-[#2B3674]">Manual Input</p>
+                              <p className="text-xs text-[#A3AED0] mt-0.5">Type details directly</p>
+                            </div>
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* OCR — Phase A: image capture */}
+                    {inputMode === "ocr" && !isOcrLoading && !ocrResult && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setInputMode("choice"); if (medicationImagePreview) { URL.revokeObjectURL(medicationImagePreview); setMedicationImagePreview(null); } setMedicationImage(null); }}
+                          className="text-xs text-[#4318FF] font-bold flex items-center gap-1 hover:underline"
+                        >
+                          ← Change Method
+                        </button>
                         <div className="flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl">
                           <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
                           <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
-                            Upload one photo showing the medication name label to help you fill in the next step.
+                            Take or upload a photo of the medication label. We'll extract the drug name, dosage, and manufacturer automatically.
                           </p>
                         </div>
-                        <div className="flex items-start gap-2 bg-[#F4F7FE] p-3 rounded-xl">
-                          <Info className="w-4 h-4 text-[#A3AED0] shrink-0 mt-0.5" />
-                          <p className="text-xs font-bold text-[#A3AED0] leading-relaxed">
-                            We do not store or transmit this photo. It is used locally for input validation only.
-                          </p>
-                        </div>
-                      </div>
-
-                      <label className="w-full px-4 py-6 bg-[#F4F7FE] border-2 border-dashed border-[#4318FF]/30 rounded-xl text-sm font-bold text-[#4318FF] hover:bg-[#E9E3FF]/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 overflow-visible">
-                        {medicationImagePreview ? (
-                          <div className="relative overflow-visible">
-                            <img src={medicationImagePreview} alt="Medication" className="max-h-32 rounded-lg object-contain" />
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                URL.revokeObjectURL(medicationImagePreview);
-                                setMedicationImage(null);
-                                setMedicationImagePreview(null);
-                              }}
-                              className="absolute -top-3 -right-3 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-10"
-                              aria-label="Remove image"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+                        {!medicationImagePreview ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <label className="flex flex-col items-center gap-2 p-5 bg-[#F4F7FE] hover:bg-[#E9E3FF] border-2 border-dashed border-[#4318FF]/30 rounded-xl cursor-pointer transition-all text-center">
+                              <Camera className="w-7 h-7 text-[#4318FF]" />
+                              <span className="text-xs font-bold text-[#4318FF]">Use Camera</span>
+                              <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
+                            </label>
+                            <label className="flex flex-col items-center gap-2 p-5 bg-[#F4F7FE] hover:bg-[#E9E3FF] border-2 border-dashed border-[#4318FF]/30 rounded-xl cursor-pointer transition-all text-center">
+                              <Upload className="w-7 h-7 text-[#4318FF]" />
+                              <span className="text-xs font-bold text-[#4318FF]">Upload Image</span>
+                              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                            </label>
                           </div>
                         ) : (
-                          <>
-                            <Upload className="w-6 h-6" />
-                            <span>Choose medication photo</span>
-                            <span className="text-xs text-[#A3AED0] font-normal">Images only (JPG, PNG, etc.)</span>
-                          </>
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="relative">
+                              <img src={medicationImagePreview} alt="Medication label" className="max-h-44 rounded-xl object-contain border border-[#E0E5F2]" />
+                              <button
+                                type="button"
+                                onClick={() => { URL.revokeObjectURL(medicationImagePreview); setMedicationImage(null); setMedicationImagePreview(null); }}
+                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <p className="text-xs font-bold text-[#A3AED0]">{medicationImage?.name}</p>
+                          </div>
                         )}
                         {medicationImage && (
-                          <span className="text-xs text-[#4318FF]">{medicationImage.name}</span>
-                        )}
-                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleNextStep}
-                      className="w-full py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98]"
-                    >
-                      Next
-                    </button>
-                  </motion.div>
-                )}
-
-                {/* Step 2: Medication Name + Manufacturer */}
-                {medicationStep === 2 && (
-                  <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
-                    {/* Drug Name */}
-                    <div className="relative z-20">
-                      <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
-                        Medication Name
-                      </label>
-                      <div className="relative">
-                        <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#A3AED0]" />
-                        <input
-                          type="text"
-                          value={medName}
-                          onChange={(e) => { setMedName(e.target.value); setSelectedDrug(null); }}
-                          onBlur={() => setTimeout(() => setShowMedsDropdown(false), 200)}
-                          placeholder="e.g., Levodopa"
-                          className="w-full pl-11 pr-4 py-3.5 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
-                          autoFocus
-                        />
-                      </div>
-                      <div className="mt-2 flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl">
-                        <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
-                        <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
-                          {selectedDrug
-                            ? `Selected: ${selectedDrug.drugName} - suggested dose: ${selectedDrug.dosage}`
-                            : "Type to search medications from the database."}
-                        </p>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Tip: Common Parkinson's medications include Levodopa, Madopar, and Entacapone</p>
-                      <AnimatePresence>
-                        {showMedsDropdown && drugSearchResults.length > 0 && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="absolute top-[75px] left-0 right-0 bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 max-h-48 overflow-y-auto z-50"
+                          <button
+                            type="button"
+                            onClick={handleNextStep}
+                            className="w-full py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98] flex items-center justify-center gap-2"
                           >
-                            {drugSearchResults.map(drug => (
-                              <div
-                                key={drug.drugId}
-                                onClick={() => {
-                                  setSelectedDrug(drug);
-                                  setMedName(drug.drugName);
-                                  if (!dose && drug.dosage) setDose(drug.dosage);
-                                  if (drug.manufacturerName) {
-                                    manufacturerJustSelected.current = true;
-                                    setManufacturerName(drug.manufacturerName);
-                                  }
-                                  if (frequency === "2 times/day" && drug.frequency) {
-                                    const count = parseInt(drug.frequency.match(/\d+/)?.[0] || "2");
-                                    setFrequency(drug.frequency);
-                                    setMedTimes(Array(count).fill(null).map(() => ({ hour: "08", minute: "00", period: "AM" })));
-                                  }
-                                  setShowMedsDropdown(false);
-                                }}
-                                className="px-4 py-3 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700 flex items-center justify-between group"
-                              >
-                                <span>{drug.drugName}</span>
-                                <span className="text-xs text-[#A3AED0]">{drug.dosage}</span>
-                                <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </div>
-                            ))}
-                          </motion.div>
+                            <Camera className="w-4 h-4" /> Scan Label
+                          </button>
                         )}
-                      </AnimatePresence>
-                    </div>
+                      </>
+                    )}
 
-                    {/* Manufacturer Name */}
-                    <div className="relative z-10">
-                      <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
-                        Manufacturer Name <span className="text-[#A3AED0] normal-case font-normal">(optional)</span>
-                      </label>
-                      <div className="relative">
-                        <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#A3AED0]" />
-                        <input
-                          type="text"
-                          value={manufacturerName}
-                          onChange={(e) => { setManufacturerName(e.target.value); }}
-                          onBlur={() => setTimeout(() => setShowManufacturerDropdown(false), 200)}
-                          placeholder="e.g., Novartis"
-                          className="w-full pl-11 pr-4 py-3.5 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
-                        />
+                    {/* OCR — Loading spinner */}
+                    {inputMode === "ocr" && isOcrLoading && (
+                      <div className="flex flex-col items-center gap-4 py-10">
+                        <Loader2 className="w-10 h-10 text-[#4318FF] animate-spin" />
+                        <p className="text-sm font-bold text-[#2B3674]">Scanning your medication label…</p>
+                        <p className="text-xs text-[#A3AED0] text-center">ParkiCare is analysing the image using AI. This takes a few seconds.</p>
                       </div>
-                      <AnimatePresence>
-                        {showManufacturerDropdown && manufacturerSuggestions.length > 0 && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="absolute top-[56px] left-0 right-0 bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 max-h-40 overflow-y-auto z-50"
-                          >
-                            {manufacturerSuggestions.map((name, i) => (
-                              <div
-                                key={i}
-                                onClick={() => { manufacturerJustSelected.current = true; setManufacturerName(name); setShowManufacturerDropdown(false); }}
-                                className="px-4 py-2.5 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700"
-                              >
-                                {name}
-                              </div>
-                            ))}
-                          </motion.div>
+                    )}
+
+                    {/* OCR Phase B (success/error) and Manual: shared fields view */}
+                    {(inputMode === "manual" || (inputMode === "ocr" && !isOcrLoading && ocrResult)) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setInputMode("choice"); setOcrResult(null); setMedName(""); setDose(""); setManufacturerName(""); setSelectedDrug(null); if (medicationImagePreview) { URL.revokeObjectURL(medicationImagePreview); setMedicationImagePreview(null); } setMedicationImage(null); }}
+                          className="text-xs text-[#4318FF] font-bold flex items-center gap-1 hover:underline"
+                        >
+                          ← Change Method
+                        </button>
+
+                        {ocrResult && !ocrResult.error && (
+                          <div className="flex items-start gap-2 bg-green-50 p-3 rounded-xl border border-green-200">
+                            <Check className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                            <p className="text-xs font-bold text-green-700 leading-relaxed">Label scanned successfully. Please verify and edit the details below if needed.</p>
+                          </div>
                         )}
-                      </AnimatePresence>
-                    </div>
+                        {ocrResult?.error && (
+                          <div className="flex items-start gap-2 bg-orange-50 p-3 rounded-xl border border-orange-200">
+                            <AlertCircle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                            <p className="text-xs font-bold text-orange-600 leading-relaxed">Could not recognise the label. Please enter the details manually below.</p>
+                          </div>
+                        )}
 
-                    <div className="flex gap-3">
-                      <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button type="button" onClick={handleNextStep} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]">Next</button>
-                    </div>
-                  </motion.div>
-                )}
+                        {/* Drug Name */}
+                        <div className="relative z-20">
+                          <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">Medication Name</label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#A3AED0]" />
+                            <input
+                              type="text"
+                              value={medName}
+                              onChange={(e) => { setMedName(e.target.value); setSelectedDrug(null); }}
+                              onBlur={() => setTimeout(() => setShowMedsDropdown(false), 200)}
+                              placeholder="e.g., Levodopa"
+                              className="w-full pl-11 pr-4 py-3.5 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
+                            />
+                          </div>
+                          <div className="mt-2 flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl">
+                            <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
+                            <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
+                              {selectedDrug ? `Selected: ${selectedDrug.drugName} — suggested dose: ${selectedDrug.dosage}` : "Type to search medications from the database."}
+                            </p>
+                          </div>
+                          <AnimatePresence>
+                            {showMedsDropdown && drugSearchResults.length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="absolute top-[75px] left-0 right-0 bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 max-h-48 overflow-y-auto z-50"
+                              >
+                                {drugSearchResults.map(drug => (
+                                  <div
+                                    key={drug.drugId}
+                                    onClick={() => {
+                                      setSelectedDrug(drug);
+                                      setMedName(drug.drugName);
+                                      if (!dose && drug.dosage) setDose(drug.dosage);
+                                      if (drug.manufacturerName) { manufacturerJustSelected.current = true; setManufacturerName(drug.manufacturerName); }
+                                      if (frequency === "2 times/day" && drug.frequency) {
+                                        const count = parseInt(drug.frequency.match(/\d+/)?.[0] || "2");
+                                        setFrequency(drug.frequency);
+                                        setMedTimes(Array(count).fill(null).map(() => ({ hour: "08", minute: "00", period: "AM" })));
+                                      }
+                                      setShowMedsDropdown(false);
+                                    }}
+                                    className="px-4 py-3 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700 flex items-center justify-between group"
+                                  >
+                                    <span>{drug.drugName}</span>
+                                    <span className="text-xs text-[#A3AED0]">{drug.dosage}</span>
+                                    <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
 
-                {/* Step 3: Dosage */}
-                {medicationStep === 3 && (
-                  <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
-                    <div className="flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl">
-                      <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
-                      <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
-                        Fill <strong>Part 1</strong> for oral medication (tablet/capsule), or <strong>Part 2</strong> for other routes (nasal spray, topical, etc.). Only one part is required.
-                      </p>
-                    </div>
-
-                    {/* Part toggle */}
-                    <div className="flex rounded-xl overflow-hidden border border-[#E0E5F2]">
-                      <button
-                        type="button"
-                        onClick={() => setDosagePart("oral")}
-                        className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "oral" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
-                      >
-                        Part 1: Oral
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDosagePart("other")}
-                        className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "other" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
-                      >
-                        Part 2: Other Route
-                      </button>
-                    </div>
-
-                    {dosagePart === "oral" ? (
-                      <div className="space-y-4">
+                        {/* Dosage */}
                         <div>
                           <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">Dosage (strength)</label>
                           <input
@@ -812,20 +844,100 @@ export function CareEventsPage() {
                             onChange={(e) => setDose(e.target.value)}
                             placeholder="e.g., 100mg, 50mg"
                             className="w-full px-4 py-3 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
-                            autoFocus
                           />
                         </div>
-                        <div>
-                          <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">Quantity (units per dose)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={quantity}
-                            onChange={(e) => setQuantity(e.target.value === "" ? "" : Math.max(1, parseInt(e.target.value) || 1))}
-                            placeholder="e.g., 1"
-                            className="w-full px-4 py-3 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
-                          />
+
+                        {/* Manufacturer */}
+                        <div className="relative z-10">
+                          <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
+                            Manufacturer / Company <span className="normal-case font-normal text-[#A3AED0]">(optional)</span>
+                          </label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-[#A3AED0]" />
+                            <input
+                              type="text"
+                              value={manufacturerName}
+                              onChange={(e) => setManufacturerName(e.target.value)}
+                              onBlur={() => setTimeout(() => setShowManufacturerDropdown(false), 200)}
+                              placeholder="e.g., Novartis"
+                              className="w-full pl-11 pr-4 py-3.5 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
+                            />
+                          </div>
+                          <AnimatePresence>
+                            {showManufacturerDropdown && manufacturerSuggestions.length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="absolute top-[56px] left-0 right-0 bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 max-h-40 overflow-y-auto z-50"
+                              >
+                                {manufacturerSuggestions.map((mfr, i) => (
+                                  <div
+                                    key={i}
+                                    onClick={() => { manufacturerJustSelected.current = true; setManufacturerName(mfr); setShowManufacturerDropdown(false); }}
+                                    className="px-4 py-2.5 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700"
+                                  >
+                                    {mfr}
+                                  </div>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={handleNextStep}
+                          className="w-full py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]"
+                        >
+                          Next
+                        </button>
+                      </>
+                    )}
+
+                  </motion.div>
+                )}
+
+                {/* Step 2: Route & Dose */}
+                {medicationStep === 2 && (
+                  <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                    <div className="flex items-start gap-2 bg-[#E9E3FF]/50 p-3 rounded-xl">
+                      <Info className="w-4 h-4 text-[#4318FF] shrink-0 mt-0.5" />
+                      <p className="text-xs font-bold text-[#4318FF] leading-relaxed">
+                        Select <strong>Oral</strong> for tablets/capsules and enter units per dose, or <strong>Other Route</strong> for nasal spray, topical, etc.
+                      </p>
+                    </div>
+
+                    {/* Route toggle */}
+                    <div className="flex rounded-xl overflow-hidden border border-[#E0E5F2]">
+                      <button
+                        type="button"
+                        onClick={() => setDosagePart("oral")}
+                        className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "oral" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
+                      >
+                        Oral
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDosagePart("other")}
+                        className={`flex-1 py-2.5 text-xs font-bold transition-all ${dosagePart === "other" ? "bg-[#4318FF] text-white" : "bg-[#F4F7FE] text-[#A3AED0] hover:bg-[#E9E3FF]"}`}
+                      >
+                        Other Route
+                      </button>
+                    </div>
+
+                    {dosagePart === "oral" ? (
+                      <div>
+                        <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">Quantity (units per dose)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value === "" ? "" : Math.max(1, parseInt(e.target.value) || 1))}
+                          placeholder="e.g., 1"
+                          className="w-full px-4 py-3 bg-[#F4F7FE] border-none rounded-xl text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50 transition-all placeholder:text-[#A3AED0]"
+                          autoFocus
+                        />
                       </div>
                     ) : (
                       <div>
@@ -848,9 +960,9 @@ export function CareEventsPage() {
                   </motion.div>
                 )}
 
-                {/* Step 4: Schedule */}
-                {medicationStep === 4 && (
-                  <motion.div key="step4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                {/* Step 3: Schedule */}
+                {medicationStep === 3 && (
+                  <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                     <div>
                       <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">
                         <Calendar className="w-3.5 h-3.5 inline mr-1" />Start Date
@@ -935,9 +1047,9 @@ export function CareEventsPage() {
                   </motion.div>
                 )}
 
-                {/* Step 5: Frequency + Meal Timing */}
-                {medicationStep === 5 && (
-                  <motion.div key="step5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                {/* Step 4: Frequency + Meal Timing */}
+                {medicationStep === 4 && (
+                  <motion.div key="step4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                     <div className="relative z-10">
                       <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 block ml-1">Frequency</label>
                       <input
@@ -995,9 +1107,9 @@ export function CareEventsPage() {
                   </motion.div>
                 )}
 
-                {/* Step 6: Administration Times */}
-                {medicationStep === 6 && (
-                  <motion.div key="step6" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                {/* Step 5: Administration Times */}
+                {medicationStep === 5 && (
+                  <motion.div key="step5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                     <div>
                       <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
                         Administration Times
@@ -1065,241 +1177,162 @@ export function CareEventsPage() {
 
                     <div className="flex gap-3">
                       <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button type="button" onClick={handleNextStep} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]">Next</button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 7: Review & Confirm */}
-                {medicationStep === 7 && (
-                  <motion.div key="step7" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                    <h3 className="text-lg font-bold text-[#2B3674] mb-2">Review Your Medication</h3>
-
-                    {/* Image */}
-                    <div onClick={() => handleEditField(1)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {medicationImagePreview ? (
-                            <img src={medicationImagePreview} alt="Med" className="w-10 h-10 rounded-lg object-cover" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-[#E9E3FF] flex items-center justify-center">
-                              <Upload className="w-4 h-4 text-[#4318FF]" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Photo</p>
-                            <p className="text-sm font-bold text-[#2B3674]">{medicationImage?.name || "No photo uploaded"}</p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                    </div>
-
-                    {/* Name + Manufacturer */}
-                    <div onClick={() => handleEditField(2)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Medication</p>
-                          <p className="text-sm font-bold text-[#2B3674]">{medName || "Not set"}</p>
-                          {manufacturerName && <p className="text-xs text-[#A3AED0] mt-0.5">{manufacturerName}</p>}
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                    </div>
-
-                    {/* Dosage */}
-                    <div onClick={() => handleEditField(3)} className={`p-4 rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group ${ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() ? "bg-[#FFF7ED] border border-orange-300" : "bg-[#F4F7FE]"}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Dosage</p>
-                          {dosagePart === "oral" ? (
-                            <p className="text-sm font-bold text-[#2B3674]">{dose || "-"} × {quantity !== "" ? quantity : "-"} unit(s)</p>
-                          ) : (
-                            <p className="text-sm font-bold text-[#2B3674]">{intakeMethod || "Not set"}</p>
-                          )}
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                      {ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
-                        <div className="mt-2 flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-                          <AlertCircle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                          <div className="text-xs text-orange-700">
-                            <p className="font-bold">Dosage mismatch detected</p>
-                            <p className="mt-0.5">Photo recognition: <strong>{ocrResult.dose}</strong> → Your input: <strong>{dose}</strong></p>
-                            <p className="mt-0.5 text-orange-500">Please verify the dosage is correct before saving.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Schedule */}
-                    <div onClick={() => handleEditField(4)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Schedule</p>
-                          <p className="text-sm font-bold text-[#2B3674]">
-                            From {startDate} {isNeverEnding ? "- ongoing" : endDate ? `to ${endDate}` : ""}
-                          </p>
-                          <p className="text-xs text-[#A3AED0] mt-0.5 capitalize">
-                            {recurrence === "none" ? "No repeat" : recurrence === "weekly" ? `Weekly on ${getDayName(startDate)}` : recurrence}
-                          </p>
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                    </div>
-
-                    {/* Frequency + Meal Timing */}
-                    <div onClick={() => handleEditField(5)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Frequency</p>
-                          <p className="text-sm font-bold text-[#2B3674]">{frequency} - {mealTiming}</p>
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                    </div>
-
-                    {/* Times */}
-                    <div onClick={() => handleEditField(6)} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-1">Administration Times</p>
-                          <div className="flex flex-wrap gap-2">
-                            {medTimes.map((t, idx) => (
-                              <span key={idx} className="text-xs font-bold text-[#4318FF] bg-white px-2.5 py-1 rounded-md border border-[#E9E3FF]">
-                                {formatDisplayTime(t.hour, t.minute, t.period)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
-                      </div>
-                    </div>
-
-                    {ocrResult && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
-                      <label className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={dosageMismatchAcked}
-                          onChange={(e) => setDosageMismatchAcked(e.target.checked)}
-                          className="mt-0.5 w-4 h-4 accent-orange-500 shrink-0"
-                        />
-                        <span className="text-xs text-orange-700 leading-relaxed">
-                          I have reviewed the dosage difference (Photo: <strong>{ocrResult.dose}</strong> vs Entered: <strong>{dose}</strong>) and confirm my input is correct.
-                        </span>
-                      </label>
-                    )}
-
-                    <div className="flex gap-3 pt-1">
-                      <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button
-                        type="submit"
-                        disabled={isSavingMed || (ocrResult != null && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && !dosageMismatchAcked)}
-                        className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      >
-                        {isSavingMed && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {isSavingMed ? "Saving..." : "Confirm & Save"}
-                      </button>
+                      <button type="button" onClick={handleNextStep} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]">Review & Confirm</button>
                     </div>
                   </motion.div>
                 )}
 
               </AnimatePresence>
             </form>
+            </>}
           </div>
 
-          {/* Right column wrapper */}
-          <div className="space-y-4">
-
-          {/* OCR Result Floating Panel */}
+          {/* Post-Medication Confirmation Modal */}
           <AnimatePresence>
-            {(isOcrLoading || ocrResult) && medicationStep >= 2 && medicationStep <= 7 && (
+            {showConfirmModal && (
               <motion.div
-                key="ocr-panel"
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.25 }}
-                className="relative bg-gradient-to-br from-[#F6F4FF] to-white rounded-[20px] p-5 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border border-[#E9E3FF]"
+                key="confirm-modal-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (ocrLoadingTimer.current) {
-                      clearTimeout(ocrLoadingTimer.current);
-                      ocrLoadingTimer.current = null;
-                    }
-                    setIsOcrLoading(false);
-                    setOcrResult(null);
-                  }}
-                  className="absolute top-3 right-3 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors z-10"
-                  aria-label="Close OCR result"
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="w-full max-w-md bg-white rounded-[20px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  <h3 className="text-lg font-bold text-[#2B3674] mb-4">Review Your Medication</h3>
 
-                <h3 className="text-sm font-bold text-[#2B3674] mb-3 flex items-center gap-2">
-                  {isOcrLoading
-                    ? <Loader2 className="w-4 h-4 text-[#4318FF] animate-spin" />
-                    : ocrResult?.error
-                    ? <AlertCircle className="w-4 h-4 text-orange-500" />
-                    : <Search className="w-4 h-4 text-[#4318FF]" />}
-                  Photo Recognition Result
-                </h3>
+                  {/* Medication */}
+                  <div
+                    onClick={() => { setShowConfirmModal(false); handleEditField(1); }}
+                    className={`p-4 rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3 ${ocrResult && !ocrResult.error && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() ? "bg-[#FFF7ED] border border-orange-300" : "bg-[#F4F7FE]"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {medicationImagePreview && (
+                          <img src={medicationImagePreview} alt="Med" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Medication</p>
+                          <p className="text-sm font-bold text-[#2B3674] truncate">{medName || "Not set"}</p>
+                          <p className="text-xs text-[#A3AED0] mt-0.5">{dose || "—"}{manufacturerName ? ` · ${manufacturerName}` : ""}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">Edit</span>
+                    </div>
+                    {ocrResult && !ocrResult.error && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
+                      <div className="mt-2 flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                        <AlertCircle className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
+                        <div className="text-xs text-orange-700">
+                          <p className="font-bold">Dosage mismatch detected</p>
+                          <p className="mt-0.5">Label scanned: <strong>{ocrResult.dose}</strong> → Entered: <strong>{dose}</strong></p>
+                          <p className="mt-0.5 text-orange-500">Please verify before saving.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                {isOcrLoading ? (
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 bg-[#EEF2FF] border border-[#C7D2FE] rounded-xl px-4 py-4">
-                      <Loader2 className="w-5 h-5 text-[#4318FF] shrink-0 mt-0.5 animate-spin" />
-                      <div className="text-sm text-[#2B3674]">
-                        <p className="font-bold">Scanning image and extracting text...</p>
-                        <p className="mt-1 text-xs leading-relaxed text-[#707EAE]">
-                          ParkiCare is checking the uploaded medication photo. Suggested details will appear here shortly.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : ocrResult?.error ? (
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-4">
-                      <AlertCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-                      <div className="text-sm text-orange-700">
-                        <p className="font-bold">Unable to recognise medication</p>
-                        <p className="mt-1 text-xs leading-relaxed text-orange-600">
-                          The image is unclear or does not contain valid medication information. Please fill in the details manually using the form on the left.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
-                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Name</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.name ?? ""}</span>
-                      </div>
-                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
-                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Dosage</span>
-                        <span className="text-sm font-bold text-[#2B3674]">{ocrResult?.dose ?? ""}</span>
-                      </div>
-                      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-[#E0E5F2]">
-                        <span className="text-xs font-bold text-[#A3AED0] uppercase w-20 shrink-0">Quantity</span>
-                        {ocrResult?.quantity ? (
-                          <span className="text-sm font-bold text-[#2B3674]">{ocrResult.quantity} unit(s) per dose</span>
+                  {/* Route & Administration */}
+                  <div onClick={() => { setShowConfirmModal(false); handleEditField(2); }} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Route & Administration</p>
+                        {dosagePart === "oral" ? (
+                          <p className="text-sm font-bold text-[#2B3674]">Oral · {quantity !== "" ? quantity : "—"} unit(s) per dose</p>
                         ) : (
-                          <span className="text-sm font-bold text-orange-500">No valid quantity value detected</span>
+                          <p className="text-sm font-bold text-[#2B3674]">Other route · {intakeMethod || "Not set"}</p>
                         )}
                       </div>
+                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
                     </div>
+                  </div>
 
-                    <p className="text-xs text-[#A3AED0] mt-3 leading-relaxed">
-                      Please verify the information above matches your medication. You can edit any field in the form on the left.
-                    </p>
-                  </>
-                )}
+                  {/* Schedule */}
+                  <div onClick={() => { setShowConfirmModal(false); handleEditField(3); }} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Schedule</p>
+                        <p className="text-sm font-bold text-[#2B3674]">
+                          From {startDate} {isNeverEnding ? "- ongoing" : endDate ? `to ${endDate}` : ""}
+                        </p>
+                        <p className="text-xs text-[#A3AED0] mt-0.5 capitalize">
+                          {recurrence === "none" ? "No repeat" : recurrence === "weekly" ? `Weekly on ${getDayName(startDate)}` : recurrence}
+                        </p>
+                      </div>
+                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                    </div>
+                  </div>
+
+                  {/* Frequency + Meal Timing */}
+                  <div onClick={() => { setShowConfirmModal(false); handleEditField(4); }} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-0.5">Frequency</p>
+                        <p className="text-sm font-bold text-[#2B3674]">{frequency} · {mealTiming}</p>
+                      </div>
+                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                    </div>
+                  </div>
+
+                  {/* Administration Times */}
+                  <div onClick={() => { setShowConfirmModal(false); handleEditField(5); }} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-1">Administration Times</p>
+                        <div className="flex flex-wrap gap-2">
+                          {medTimes.map((t, idx) => (
+                            <span key={idx} className="text-xs font-bold text-[#4318FF] bg-white px-2.5 py-1 rounded-md border border-[#E9E3FF]">
+                              {formatDisplayTime(t.hour, t.minute, t.period)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                    </div>
+                  </div>
+
+                  {ocrResult && !ocrResult.error && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
+                    <label className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 cursor-pointer select-none mb-4">
+                      <input
+                        type="checkbox"
+                        checked={dosageMismatchAcked}
+                        onChange={(e) => setDosageMismatchAcked(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-orange-500 shrink-0"
+                      />
+                      <span className="text-xs text-orange-700 leading-relaxed">
+                        I have reviewed the dosage difference (Label: <strong>{ocrResult.dose}</strong> vs Entered: <strong>{dose}</strong>) and confirm my input is correct.
+                      </span>
+                    </label>
+                  )}
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmModal(false)}
+                      className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]"
+                    >
+                      Back to Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleSaveMedication(e)}
+                      disabled={isSavingMed || (ocrResult != null && !ocrResult.error && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && !dosageMismatchAcked)}
+                      className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_25px_rgba(67,24,255,0.4)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isSavingMed && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {isSavingMed ? "Saving..." : "Confirm & Save"}
+                    </button>
+                  </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Right column wrapper */}
+          <div className="space-y-4">
 
           {/* Medication List */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none">

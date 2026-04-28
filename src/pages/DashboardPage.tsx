@@ -458,6 +458,41 @@ export function DashboardPage() {
 
   return (
     <>
+      {/* Mental Health Crisis Banner */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-6 rounded-[20px] bg-gradient-to-r from-[#4318FF]/10 via-purple-50 to-pink-50 border border-[#4318FF]/20 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+      >
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#4318FF]/10 flex items-center justify-center shrink-0">
+            <Heart className="w-5 h-5 text-[#4318FF]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-[#2B3674]">Need someone to talk to?</p>
+            <p className="text-xs text-[#707EAE] font-medium mt-0.5">
+              MIASA Malaysia offers free mental health crisis support. You are not alone.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 pl-13 sm:pl-0">
+          <a
+            href="tel:1800180066"
+            className="px-4 py-2 bg-[#4318FF] hover:bg-[#3412C7] text-white text-xs font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] hover:shadow-[0_6px_20px_rgba(67,24,255,0.4)] active:scale-[0.97]"
+          >
+            Call Now
+          </a>
+          <button
+            type="button"
+            onClick={() => navigate('/knowledge-hub#miasa-support')}
+            className="px-4 py-2 bg-white hover:bg-[#F4F7FE] text-[#4318FF] text-xs font-bold rounded-xl border border-[#4318FF]/30 transition-all active:scale-[0.97]"
+          >
+            Read More
+          </button>
+        </div>
+      </motion.div>
+
       {/* Full Width Calendar at Top */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

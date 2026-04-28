@@ -37,7 +37,7 @@ export const AppLayout = () => {
     { name: "Guide", path: "/guide" },
     { name: "Knowledge Hub", path: "/knowledge-hub" },
     { name: "Care Events", path: "/care-events" },
-    // { name: "Digital Records", path: "/digital-records" },
+    { name: "Digital Records", path: "/digital-records" },
   ];
 
   return (
