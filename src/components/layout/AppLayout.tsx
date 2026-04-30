@@ -38,6 +38,8 @@ export const AppLayout = () => {
     { name: "Knowledge Hub", path: "/knowledge-hub" },
     { name: "Care Events", path: "/care-events" },
     { name: "Digital Records", path: "/digital-records" },
+    { name: "Nutrition Library", path: "/nutrition-library" },
+    { name: "Recipes", path: "/recipes" },
   ];
 
   return (

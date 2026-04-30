@@ -6,6 +6,7 @@ export interface DrugBase {
   dosage: string;
   frequency: string;
   manufacturerName: string;
+  intervalMinutes?: number;
 }
 
 export const drugsService = {

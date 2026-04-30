@@ -35,7 +35,7 @@ export function DigitalRecordsPage() {
 
   // --- Table 1: Medication report ---
   const [medicationReport, setMedicationReport] = useState<MedicationReportDTO | null>(null);
-  const [reportMode1, setReportMode1] = useState<MedicationReportScope>("sinceLastExport");
+  const [reportMode1, setReportMode1] = useState<MedicationReportScope>("fullHistory");
   const [showDropdown1, setShowDropdown1] = useState(false);
   const [startDate1, setStartDate1] = useState<Date | null>(null);
   const [endDate1, setEndDate1] = useState<Date | null>(null);
