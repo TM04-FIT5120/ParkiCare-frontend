@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { CareEventsProvider } from "@/context/CareEventsProvider";
 import { MedicationAlertProvider, useMedicationAlert } from "@/context/MedicationAlertContext";
+import { NutritionCartProvider } from "@/context/NutritionCartContext";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { AppRoutes } from "@/routes/AppRoutes";
 
@@ -28,15 +29,17 @@ const MedicationAlertRouteGuard = () => {
 
 export const App = () => (
   <MedicationAlertProvider>
-    <Toaster position="top-center" richColors />
-    <BrowserRouter>
-      <AuthProvider>
-        <CareEventsProvider>
-          <NotificationBootstrap />
-          <MedicationAlertRouteGuard />
-          <AppRoutes />
-        </CareEventsProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <NutritionCartProvider>
+      <Toaster position="top-center" richColors />
+      <BrowserRouter>
+        <AuthProvider>
+          <CareEventsProvider>
+            <NotificationBootstrap />
+            <MedicationAlertRouteGuard />
+            <AppRoutes />
+          </CareEventsProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </NutritionCartProvider>
   </MedicationAlertProvider>
 );

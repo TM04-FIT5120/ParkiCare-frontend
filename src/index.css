@@ -68,3 +68,40 @@
   .bg-blob-2,
   .bg-blob-3 { animation: none !important; }
 }
+
+/* ── Nutrition Library ──────────────────────────────────────────────────────*/
+.nl-ci {
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.nl-ci.nl-flipped { transform: rotateY(180deg); }
+.nl-cf {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+.nl-cb { transform: rotateY(180deg); }
+
+.nl-no-scroll::-webkit-scrollbar { display: none; }
+.nl-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Filter bar bleed — matches AppLayout main padding per breakpoint */
+.nl-filter-bleed {
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+@media (min-width: 640px) {
+  .nl-filter-bleed { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; }
+}
+@media (min-width: 768px) {
+  .nl-filter-bleed { margin-left: -28px; margin-right: -28px; padding-left: 28px; padding-right: 28px; }
+}
+@media (min-width: 1280px) {
+  .nl-filter-bleed { margin-left: -32px; margin-right: -32px; padding-left: 32px; padding-right: 32px; }
+}

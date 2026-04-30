@@ -6,6 +6,8 @@ import { DigitalRecordsPage } from "@/pages/DigitalRecordsPage";
 import { GuidePage } from "@/pages/GuidePage";
 import { LoadingScreenPage } from "@/pages/LoadingScreenPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { NutritionLibraryPage } from "@/pages/NutritionLibraryPage";
+import { RecipesPage } from "@/pages/RecipesPage";
 import { PatientSetupPage } from "@/pages/PatientSetupPage";
 import { PerkinsDetailsPage } from "@/pages/PerkinsDetailsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
@@ -24,6 +26,8 @@ export const AppRoutes = () => (
       <Route path="/knowledge-hub" element={<PerkinsDetailsPage />} />
       <Route path="/care-events" element={<CareEventsPage />} />
       <Route path="/digital-records" element={<DigitalRecordsPage />} />
+      <Route path="/nutrition-library" element={<NutritionLibraryPage />} />
+      <Route path="/recipes" element={<RecipesPage />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>

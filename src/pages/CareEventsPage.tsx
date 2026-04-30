@@ -10,13 +10,31 @@ import { scanMedicineLabel } from "@/services/ocr";
 import { HistorySection } from "@/components/HistorySection";
 import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString } from "@/lib/eventRecurrence";
+import { getMealSchedules, type MealScheduleEntry } from "@/services/mealSchedule";
 
 const CARE_EVENT_TYPES = ["Bathing", "Nursing Care", "Toileting Assist", "Meals", "Exercise", "Physical Therapy"];
 const OUTDOOR_EVENT_TYPES = ["Doctor Appointment", "Walk in Park", "Social Visit", "Shopping", "Recreation", "Family Outing"];
-const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day", "4 times/day"];
+const FREQUENCIES = ["1 time/day", "2 times/day", "3 times/day"];
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
-const MED_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+const DEFAULT_MEAL_TIMES: MealScheduleEntry[] = [
+  { caregiverId: 0, mealType: "BREAKFAST", mealTime: "08:00" },
+  { caregiverId: 0, mealType: "LUNCH",     mealTime: "13:00" },
+  { caregiverId: 0, mealType: "DINNER",    mealTime: "19:00" },
+];
+
+const MEAL_LABELS: Record<string, string> = {
+  BREAKFAST: "Breakfast",
+  LUNCH:     "Lunch",
+  DINNER:    "Dinner",
+};
+
+const MEAL_OFFSET: Record<string, number> = {
+  "before meals": -60,
+  "after meals":  60,
+  "with meals":   0,
+};
 
 function getDayName(dateStr: string): string {
   if (!dateStr) return "selected day";
@@ -35,6 +53,53 @@ function formatDisplayTime(hour: string, minute: string, period: string): string
   return `${hour}:${minute} ${period}`;
 }
 
+function minutesToHHmm(totalMinutes: number): string {
+  const norm = ((totalMinutes % 1440) + 1440) % 1440;
+  const h = Math.floor(norm / 60);
+  const m = norm % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function hhmmTo12h(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":");
+  let h = parseInt(hStr, 10);
+  const period = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${String(h).padStart(2, "0")}:${mStr} ${period}`;
+}
+
+function calculateDoseTimes(
+  selectedMeals: string[],
+  mealSchedules: MealScheduleEntry[],
+  mealTiming: string,
+  intervalMinutes: number
+): { times: string[]; orderedMeals: string[] } {
+  const offset = MEAL_OFFSET[mealTiming] ?? 0;
+
+  const pairs = selectedMeals.map(meal => {
+    const entry =
+      mealSchedules.find(e => e.mealType === meal) ??
+      DEFAULT_MEAL_TIMES.find(e => e.mealType === meal)!;
+    const [h, m] = entry.mealTime.split(":").map(Number);
+    return { meal, totalMinutes: ((h * 60 + m) + offset + 1440) % 1440 };
+  });
+
+  pairs.sort((a, b) => a.totalMinutes - b.totalMinutes);
+
+  for (let i = 1; i < pairs.length; i++) {
+    const minAllowed = pairs[i - 1].totalMinutes + intervalMinutes;
+    if (pairs[i].totalMinutes < minAllowed % 1440) {
+      pairs[i] = { ...pairs[i], totalMinutes: minAllowed % 1440 };
+    }
+  }
+
+  return {
+    times: pairs.map(p => minutesToHHmm(p.totalMinutes)),
+    orderedMeals: pairs.map(p => p.meal),
+  };
+}
+
 export function CareEventsPage() {
   const { meds, addMed, deleteMed, events, addEvent, deleteEvent, togglePin, patientId } = useCareEvents();
   const { user } = useAuth();
@@ -43,6 +108,14 @@ export function CareEventsPage() {
   // Refs for scroll-to on reuse
   const careEventFormRef = useRef<HTMLDivElement>(null);
   const outdoorEventFormRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to section when navigated with a URL hash (e.g. /care-events#medication-section)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+  }, []);
 
   // --- Medication state ---
   const [medName, setMedName] = useState("");
@@ -62,11 +135,13 @@ export function CareEventsPage() {
   // Frequency & meal timing
   const [frequency, setFrequency] = useState("2 times/day");
   const [mealTiming, setMealTiming] = useState<"before meals" | "after meals" | "with meals">("after meals");
-  // Times
-  const [medTimes, setMedTimes] = useState<{ hour: string; minute: string; period: string }[]>([
-    { hour: "08", minute: "00", period: "AM" },
-    { hour: "08", minute: "00", period: "PM" },
-  ]);
+  // Auto-scheduling state
+  const [selectedMeals, setSelectedMeals] = useState<string[]>([]);
+  const [mealSchedules, setMealSchedules] = useState<MealScheduleEntry[]>([]);
+  const [usingDefaultMealTimes, setUsingDefaultMealTimes] = useState(false);
+  const [drugIntervalMinutes, setDrugIntervalMinutes] = useState(0);
+  const [calculatedTimes, setCalculatedTimes] = useState<string[]>([]);
+  const [orderedMealsForTimes, setOrderedMealsForTimes] = useState<string[]>([]);
   // Image upload (client-side only)
   const [medicationImage, setMedicationImage] = useState<File | null>(null);
   const [medicationImagePreview, setMedicationImagePreview] = useState<string | null>(null);
@@ -83,6 +158,7 @@ export function CareEventsPage() {
   const [formInteractive, setFormInteractive] = useState(false);
   const [showPreMedWarning, setShowPreMedWarning] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [expandMealEdit, setExpandMealEdit] = useState(false);
   const drugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manufacturerJustSelected = useRef(false);
@@ -207,10 +283,41 @@ export function CareEventsPage() {
     };
   }, [medicationImagePreview]);
 
+  // Fetch meal schedules for auto-scheduling
+  useEffect(() => {
+    if (!caregiverId) return;
+    getMealSchedules(caregiverId)
+      .then(schedules => {
+        if (schedules.length > 0) {
+          setMealSchedules(schedules);
+          setUsingDefaultMealTimes(false);
+        } else {
+          setMealSchedules(DEFAULT_MEAL_TIMES);
+          setUsingDefaultMealTimes(true);
+        }
+      })
+      .catch(() => {
+        setMealSchedules(DEFAULT_MEAL_TIMES);
+        setUsingDefaultMealTimes(true);
+      });
+  }, [caregiverId]);
+
+  // Recalculate dose times whenever meal selection, meal timing, or interval changes
+  useEffect(() => {
+    if (selectedMeals.length === 0) {
+      setCalculatedTimes([]);
+      setOrderedMealsForTimes([]);
+      return;
+    }
+    const effective = mealSchedules.length > 0 ? mealSchedules : DEFAULT_MEAL_TIMES;
+    const { times, orderedMeals } = calculateDoseTimes(selectedMeals, effective, mealTiming, drugIntervalMinutes);
+    setCalculatedTimes(times);
+    setOrderedMealsForTimes(orderedMeals);
+  }, [selectedMeals, mealSchedules, mealTiming, drugIntervalMinutes]);
+
   const handleFrequencyChange = (newFreq: string) => {
     setFrequency(newFreq);
-    const count = parseInt(newFreq.match(/\d+/)?.[0] || "1");
-    setMedTimes(Array(count).fill(null).map(() => ({ hour: "08", minute: "00", period: "AM" })));
+    setSelectedMeals([]);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -241,7 +348,10 @@ export function CareEventsPage() {
     setRecurrence("none");
     setFrequency("2 times/day");
     setMealTiming("after meals");
-    setMedTimes([{ hour: "08", minute: "00", period: "AM" }, { hour: "08", minute: "00", period: "PM" }]);
+    setSelectedMeals([]);
+    setDrugIntervalMinutes(0);
+    setCalculatedTimes([]);
+    setOrderedMealsForTimes([]);
     if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
     setMedicationImage(null);
     setMedicationImagePreview(null);
@@ -250,6 +360,7 @@ export function CareEventsPage() {
     setDosageMismatchAcked(false);
     setFormInteractive(false);
     setShowConfirmModal(false);
+    setExpandMealEdit(false);
   };
 
   const handleSaveMedication = async (e: React.SyntheticEvent) => {
@@ -268,14 +379,13 @@ export function CareEventsPage() {
       toast.error("Please select frequency");
       return;
     }
-    const validTimes = medTimes.filter(t => t.hour && t.minute && t.period);
-    if (validTimes.length === 0) {
-      toast.error("Please add at least one administration time");
+    if (calculatedTimes.length === 0) {
+      toast.error("Please complete the meal selection to schedule times");
       return;
     }
 
-    const adminTimesStr = validTimes.map(t => to24h(t.hour, t.minute, t.period)).join(",");
-    const remindTime = to24h(validTimes[0].hour, validTimes[0].minute, validTimes[0].period);
+    const adminTimesStr = calculatedTimes.join(",");
+    const remindTime = calculatedTimes[0];
     const finalDosage = dosagePart === "oral" ? dose.trim() : intakeMethod.trim();
     const finalQuantity = dosagePart === "oral" && quantity !== "" ? Number(quantity) : null;
     const finalIntakeMethod = dosagePart === "other" ? intakeMethod.trim() : null;
@@ -318,8 +428,8 @@ export function CareEventsPage() {
           return;
         }
       } else {
-        validTimes.forEach(t => {
-          addMed({ name: medName, dose: finalDosage, frequency, time: to24h(t.hour, t.minute, t.period) });
+        calculatedTimes.forEach(t => {
+          addMed({ name: medName, dose: finalDosage, frequency, time: t });
         });
         toast.success("Medication saved locally");
       }
@@ -389,14 +499,18 @@ export function CareEventsPage() {
         return;
       }
     }
-    if (medicationStep === 4 && !frequency.trim()) {
-      toast.error("Please select frequency");
-      return;
-    }
-    if (medicationStep === 5) {
-      const validTimes = medTimes.filter(t => t.hour && t.minute && t.period);
-      if (validTimes.length === 0) {
-        toast.error("Please set at least one administration time");
+    if (medicationStep === 4) {
+      if (!frequency.trim()) {
+        toast.error("Please select frequency");
+        return;
+      }
+      const requiredCount = parseInt(frequency.match(/\d+/)?.[0] || "1");
+      if (selectedMeals.length !== requiredCount) {
+        toast.error(`Please select exactly ${requiredCount} meal(s) to anchor your doses`);
+        return;
+      }
+      if (calculatedTimes.length === 0) {
+        toast.error("Could not calculate dose times. Please try again.");
         return;
       }
       setShowConfirmModal(true);
@@ -536,8 +650,8 @@ export function CareEventsPage() {
     }
   };
 
-  const TOTAL_STEPS = 5;
-  const STEP_LABELS = ["Medication", "Route & Dose", "Schedule", "Frequency", "Time"];
+  const TOTAL_STEPS = 4;
+  const STEP_LABELS = ["Medication", "Route & Dose", "Schedule", "Frequency"];
 
   return (
     <div className="pb-10">
@@ -549,7 +663,7 @@ export function CareEventsPage() {
       <div className="space-y-6 sm:space-y-8">
 
         {/* Medication Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
+        <div id="medication-section" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Medication Form */}
           <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative overflow-hidden">
@@ -817,10 +931,12 @@ export function CareEventsPage() {
                                       if (!dose && drug.dosage) setDose(drug.dosage);
                                       if (drug.manufacturerName) { manufacturerJustSelected.current = true; setManufacturerName(drug.manufacturerName); }
                                       if (frequency === "2 times/day" && drug.frequency) {
-                                        const count = parseInt(drug.frequency.match(/\d+/)?.[0] || "2");
                                         setFrequency(drug.frequency);
-                                        setMedTimes(Array(count).fill(null).map(() => ({ hour: "08", minute: "00", period: "AM" })));
+                                        setSelectedMeals([]);
                                       }
+                                      drugsService.getDrugById(drug.drugId)
+                                        .then(detail => setDrugIntervalMinutes(detail.intervalMinutes ?? 0))
+                                        .catch(() => setDrugIntervalMinutes(0));
                                       setShowMedsDropdown(false);
                                     }}
                                     className="px-4 py-3 hover:bg-indigo-50 rounded-lg cursor-pointer text-sm font-semibold text-slate-700 hover:text-indigo-700 flex items-center justify-between group"
@@ -1100,79 +1216,66 @@ export function CareEventsPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-3">
-                      <button type="button" onClick={handlePrevStep} className="flex-1 py-4 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all active:scale-[0.98]">Back</button>
-                      <button type="button" onClick={handleNextStep} className="flex-1 py-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.3)] active:scale-[0.98]">Next</button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 5: Administration Times */}
-                {medicationStep === 5 && (
-                  <motion.div key="step5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                    {/* Meal Selection */}
                     <div>
-                      <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 block ml-1">
-                        Administration Times
+                      <label className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-1 block ml-1">
+                        Anchor meals
                       </label>
-                      <div className="space-y-4">
-                        {medTimes.map((t, idx) => (
-                          <div key={idx} className="p-4 bg-[#F4F7FE] rounded-xl space-y-3">
-                            <p className="text-xs font-bold text-[#4318FF]">Dose {idx + 1} - {formatDisplayTime(t.hour, t.minute, t.period)}</p>
-                            <div className="grid grid-cols-3 gap-2">
-                              {/* Hour */}
-                              <div>
-                                <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Hour</p>
-                                <select
-                                  value={t.hour}
-                                  onChange={(e) => {
-                                    const updated = [...medTimes];
-                                    updated[idx] = { ...updated[idx], hour: e.target.value };
-                                    setMedTimes(updated);
-                                  }}
-                                  className="w-full px-2 py-2.5 bg-white border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
-                                >
-                                  {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                              {/* Minute */}
-                              <div>
-                                <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Minute</p>
-                                <select
-                                  value={t.minute}
-                                  onChange={(e) => {
-                                    const updated = [...medTimes];
-                                    updated[idx] = { ...updated[idx], minute: e.target.value };
-                                    setMedTimes(updated);
-                                  }}
-                                  className="w-full px-2 py-2.5 bg-white border border-[#E0E5F2] rounded-lg text-sm font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/50"
-                                >
-                                  {MED_MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                              </div>
-                              {/* AM/PM */}
-                              <div>
-                                <p className="text-[10px] font-bold text-[#A3AED0] mb-1.5 uppercase tracking-widest">Period</p>
-                                <div className="flex rounded-lg overflow-hidden border border-[#E0E5F2]">
-                                  {["AM", "PM"].map(p => (
-                                    <button
-                                      key={p}
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = [...medTimes];
-                                        updated[idx] = { ...updated[idx], period: p };
-                                        setMedTimes(updated);
-                                      }}
-                                      className={`flex-1 py-2.5 text-xs font-bold transition-all ${t.period === p ? "bg-[#4318FF] text-white" : "bg-white text-[#A3AED0] hover:bg-[#F4F7FE]"}`}
-                                    >
-                                      {p}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                      <p className="text-[11px] text-[#A3AED0] mb-3 ml-1">
+                        Select {parseInt(frequency.match(/\d+/)?.[0] || "1")} meal{parseInt(frequency.match(/\d+/)?.[0] || "1") > 1 ? "s" : ""} to schedule doses around
+                      </p>
+                      <div className="space-y-2">
+                        {(["BREAKFAST", "LUNCH", "DINNER"] as const).map(meal => {
+                          const entry = (mealSchedules.length > 0 ? mealSchedules : DEFAULT_MEAL_TIMES).find(e => e.mealType === meal)!;
+                          const isSelected = selectedMeals.includes(meal);
+                          const requiredCount = parseInt(frequency.match(/\d+/)?.[0] || "1");
+                          const canSelect = isSelected || selectedMeals.length < requiredCount;
+                          return (
+                            <button
+                              key={meal}
+                              type="button"
+                              disabled={!canSelect}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedMeals(prev => prev.filter(m => m !== meal));
+                                } else if (canSelect) {
+                                  setSelectedMeals(prev => [...prev, meal]);
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all border-2 ${
+                                isSelected
+                                  ? "bg-[#4318FF] text-white border-[#4318FF] shadow-[0_4px_15px_rgba(67,24,255,0.25)]"
+                                  : canSelect
+                                  ? "bg-[#F4F7FE] text-[#2B3674] border-transparent hover:border-[#4318FF]/30 hover:bg-[#E9E3FF]"
+                                  : "bg-[#F4F7FE] text-[#A3AED0] border-transparent opacity-50 cursor-not-allowed"
+                              }`}
+                            >
+                              <span>{MEAL_LABELS[meal]}</span>
+                              <span className={`text-xs font-bold ${isSelected ? "text-white/80" : "text-[#A3AED0]"}`}>
+                                {hhmmTo12h(entry.mealTime)}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      {usingDefaultMealTimes && (
+                        <div className="flex items-start gap-2 mt-3 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                          <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                          <p className="text-xs text-amber-700">Using default meal times. Update them in Meal Schedule settings.</p>
+                        </div>
+                      )}
+                      {calculatedTimes.length > 0 && (
+                        <div className="mt-3 p-3 bg-[#E9E3FF]/50 rounded-xl">
+                          <p className="text-[10px] font-bold text-[#4318FF] uppercase tracking-widest mb-2">Preview</p>
+                          <div className="space-y-1">
+                            {calculatedTimes.map((t, i) => (
+                              <p key={i} className="text-xs font-bold text-[#2B3674]">
+                                Dose {i + 1} – {hhmmTo12h(t)}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-3">
@@ -1181,6 +1284,7 @@ export function CareEventsPage() {
                     </div>
                   </motion.div>
                 )}
+
 
               </AnimatePresence>
             </form>
@@ -1277,21 +1381,73 @@ export function CareEventsPage() {
                     </div>
                   </div>
 
-                  {/* Administration Times */}
-                  <div onClick={() => { setShowConfirmModal(false); handleEditField(5); }} className="p-4 bg-[#F4F7FE] rounded-xl hover:bg-[#E9E3FF] cursor-pointer transition-all group mb-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-1">Administration Times</p>
-                        <div className="flex flex-wrap gap-2">
-                          {medTimes.map((t, idx) => (
-                            <span key={idx} className="text-xs font-bold text-[#4318FF] bg-white px-2.5 py-1 rounded-md border border-[#E9E3FF]">
-                              {formatDisplayTime(t.hour, t.minute, t.period)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <span className="text-xs text-[#4318FF] opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
+                  {/* Scheduled Times (auto-calculated, inline-editable) */}
+                  <div className={`p-4 rounded-xl transition-all mb-3 ${expandMealEdit ? "bg-[#E9E3FF]/60 border border-[#4318FF]/20" : "bg-[#F4F7FE]"}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest">Scheduled Times</p>
+                      <button
+                        type="button"
+                        onClick={() => setExpandMealEdit(v => !v)}
+                        className="text-xs font-bold text-[#4318FF] hover:underline shrink-0 ml-3"
+                      >
+                        {expandMealEdit ? "Done" : "Edit"}
+                      </button>
                     </div>
+
+                    {/* Dose time summary */}
+                    <div className="space-y-1.5 mb-3">
+                      {calculatedTimes.map((t, idx) => {
+                        const meal = orderedMealsForTimes[idx];
+                        const offsetLabel = mealTiming === "before meals" ? "1hr before" : mealTiming === "after meals" ? "1hr after" : "with";
+                        return (
+                          <div key={idx} className="flex items-center justify-between">
+                            <span className="text-sm font-bold text-[#2B3674]">Dose {idx + 1} – {hhmmTo12h(t)}</span>
+                            <span className="text-xs text-[#A3AED0]">{offsetLabel} {MEAL_LABELS[meal] ?? meal}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Inline meal anchor editor */}
+                    {expandMealEdit && (
+                      <div className="border-t border-[#4318FF]/10 pt-3 space-y-2">
+                        <p className="text-[11px] font-bold text-[#4318FF] mb-2">
+                          Change meal anchors (select {parseInt(frequency.match(/\d+/)?.[0] || "1")})
+                        </p>
+                        {(["BREAKFAST", "LUNCH", "DINNER"] as const).map(meal => {
+                          const entry = (mealSchedules.length > 0 ? mealSchedules : DEFAULT_MEAL_TIMES).find(e => e.mealType === meal)!;
+                          const isSelected = selectedMeals.includes(meal);
+                          const requiredCount = parseInt(frequency.match(/\d+/)?.[0] || "1");
+                          const canSelect = isSelected || selectedMeals.length < requiredCount;
+                          return (
+                            <button
+                              key={meal}
+                              type="button"
+                              disabled={!canSelect}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedMeals(prev => prev.filter(m => m !== meal));
+                                } else if (canSelect) {
+                                  setSelectedMeals(prev => [...prev, meal]);
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                                isSelected
+                                  ? "bg-[#4318FF] text-white border-[#4318FF]"
+                                  : canSelect
+                                  ? "bg-white text-[#2B3674] border-transparent hover:border-[#4318FF]/30"
+                                  : "bg-white text-[#A3AED0] border-transparent opacity-50 cursor-not-allowed"
+                              }`}
+                            >
+                              <span>{MEAL_LABELS[meal]}</span>
+                              <span className={`text-xs ${isSelected ? "text-white/80" : "text-[#A3AED0]"}`}>
+                                {hhmmTo12h(entry.mealTime)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {ocrResult && !ocrResult.error && dose.trim().toLowerCase() !== ocrResult.dose.toLowerCase() && (
@@ -1412,7 +1568,7 @@ export function CareEventsPage() {
         />
 
         {/* Care Events Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
+        <div id="care-event-section" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Care Event Form */}
           <div ref={careEventFormRef} className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">
@@ -1717,7 +1873,7 @@ export function CareEventsPage() {
         </div>
 
         {/* Outdoor Events Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
+        <div id="outdoor-event-section" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
 
           {/* Add Outdoor Event Form */}
           <div ref={outdoorEventFormRef} className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none relative">

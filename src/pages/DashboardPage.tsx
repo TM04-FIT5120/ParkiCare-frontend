@@ -15,6 +15,10 @@ import {
   Trash2,
   Loader2,
   Bell,
+  Pencil,
+  Coffee,
+  Utensils,
+  Moon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCareEvents } from "@/hooks/useCareEvents";
@@ -25,6 +29,7 @@ import {
   upsertCaregiverEventOccurrence,
 } from "@/services/caregiverEventOccurrences";
 import { dashboardService } from "@/services/dashboard";
+import { getMealSchedules, updateMealTime, generateWeeklyMeals } from "@/services/mealSchedule";
 import { useAuth } from "@/context/AuthContext";
 import { useMedicationAlert, useMedicationAlertSnoozeScheduler } from "@/context/MedicationAlertContext";
 import { CalendarWidget } from "@/components/CalendarWidget";
@@ -41,6 +46,244 @@ import {
 
 const HOURS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
 const MINUTES = ["00","05","10","15","20","25","30","35","40","45","50","55"];
+
+const MEAL_HOURS = HOURS;
+const MEAL_MINUTES = MINUTES;
+
+type MealRow = {
+  mealType: string;
+  label: string;
+  mealTime: string;
+  editHour: string;
+  editMinute: string;
+  editPeriod: "AM" | "PM";
+  editing: boolean;
+  saving: boolean;
+};
+
+const DEFAULT_MEALS: Omit<MealRow, "editing" | "saving">[] = [
+  { mealType: "BREAKFAST", label: "Breakfast", mealTime: "08:00", editHour: "08", editMinute: "00", editPeriod: "AM" },
+  { mealType: "LUNCH",     label: "Lunch",     mealTime: "13:00", editHour: "01", editMinute: "00", editPeriod: "PM" },
+  { mealType: "DINNER",    label: "Dinner",    mealTime: "19:00", editHour: "07", editMinute: "00", editPeriod: "PM" },
+];
+
+const MEAL_ICON_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; bg: string; color: string }> = {
+  BREAKFAST: { icon: Coffee,   bg: "bg-amber-50",   color: "text-amber-500"  },
+  LUNCH:     { icon: Utensils, bg: "bg-orange-50",  color: "text-orange-500" },
+  DINNER:    { icon: Moon,     bg: "bg-indigo-50",  color: "text-indigo-500" },
+};
+
+function parseToEditFields(mealTime: string): { editHour: string; editMinute: string; editPeriod: "AM" | "PM" } {
+  const [hStr, mStr] = mealTime.split(":");
+  let h = parseInt(hStr, 10);
+  const period: "AM" | "PM" = h < 12 ? "AM" : "PM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return { editHour: String(h).padStart(2, "0"), editMinute: mStr, editPeriod: period };
+}
+
+function formatMealDisplayTime(mealTime: string): string {
+  const [hStr, mStr] = mealTime.split(":");
+  let h = parseInt(hStr, 10);
+  const period = h < 12 ? "AM" : "PM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${mStr} ${period}`;
+}
+
+function MealPlannerPanel({
+  caregiverId,
+  navigate,
+  onSaved,
+}: {
+  caregiverId: number;
+  navigate: (path: string) => void;
+  onSaved: () => void;
+}) {
+  const [rows, setRows] = useState<MealRow[]>(() =>
+    DEFAULT_MEALS.map((m) => ({ ...m, editing: false, saving: false }))
+  );
+
+  useEffect(() => {
+    if (!caregiverId) return;
+    getMealSchedules(caregiverId)
+      .then((entries) => {
+        setRows((prev) =>
+          prev.map((row) => {
+            const found = entries.find((e) => e.mealType === row.mealType);
+            if (!found) return row;
+            const fields = parseToEditFields(found.mealTime);
+            return { ...row, mealTime: found.mealTime, ...fields };
+          })
+        );
+      })
+      .catch(() => {});
+  }, [caregiverId]);
+
+  function startEdit(mealType: string) {
+    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, editing: true } : r)));
+  }
+
+  function cancelEdit(mealType: string) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.mealType !== mealType) return r;
+        return { ...r, editing: false, ...parseToEditFields(r.mealTime) };
+      })
+    );
+  }
+
+  async function saveEdit(mealType: string) {
+    const row = rows.find((r) => r.mealType === mealType);
+    if (!row) return;
+    let h = parseInt(row.editHour, 10);
+    if (row.editPeriod === "AM" && h === 12) h = 0;
+    if (row.editPeriod === "PM" && h !== 12) h += 12;
+    const newTime = `${String(h).padStart(2, "0")}:${row.editMinute}`;
+    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, saving: true } : r)));
+    try {
+      await updateMealTime(caregiverId, mealType, newTime);
+      setRows((prev) =>
+        prev.map((r) =>
+          r.mealType === mealType ? { ...r, mealTime: newTime, editing: false, saving: false } : r
+        )
+      );
+      toast.success("Meal time saved");
+      onSaved();
+    } catch {
+      toast.error("Failed to save meal time");
+      setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, saving: false } : r)));
+    }
+  }
+
+  function setField(mealType: string, field: "editHour" | "editMinute" | "editPeriod", value: string) {
+    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, [field]: value } : r)));
+  }
+
+  return (
+    <div className="bg-white rounded-[20px] p-5 shadow-[0_18px_40px_rgba(112,144,176,0.12)] flex flex-col gap-4 h-full">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-lg bg-[#E9E3FF] flex items-center justify-center">
+          <Clock className="w-4 h-4 text-[#4318FF]" />
+        </div>
+        <h2 className="text-base font-bold text-[#2B3674]">Meal Planner</h2>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <div key={row.mealType} className="bg-[#F4F7FE] rounded-xl px-4 py-3">
+            {!row.editing ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {(() => { const cfg = MEAL_ICON_CONFIG[row.mealType]; return cfg ? <div className={`w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}><cfg.icon className={`w-4 h-4 ${cfg.color}`} /></div> : null; })()}
+                  <div>
+                    <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest leading-none mb-0.5">
+                      {row.label}
+                    </p>
+                    <p className="text-sm font-bold text-[#2B3674]">
+                      {formatMealDisplayTime(row.mealTime)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => startEdit(row.mealType)}
+                  className="w-7 h-7 rounded-lg bg-white hover:bg-[#E9E3FF] flex items-center justify-center transition-all group"
+                  title="Edit time"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-[#A3AED0] group-hover:text-[#4318FF]" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest flex items-center gap-1.5">
+                  {(() => { const cfg = MEAL_ICON_CONFIG[row.mealType]; return cfg ? <cfg.icon className={`w-3.5 h-3.5 ${cfg.color}`} /> : null; })()}
+                  {row.label}
+                </p>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={row.editHour}
+                    onChange={(e) => setField(row.mealType, "editHour", e.target.value)}
+                    className="flex-1 px-2 py-1.5 bg-white border border-[#E0E5F2] rounded-lg text-xs font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30"
+                  >
+                    {MEAL_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <span className="text-[#A3AED0] font-bold text-xs">:</span>
+                  <select
+                    value={row.editMinute}
+                    onChange={(e) => setField(row.mealType, "editMinute", e.target.value)}
+                    className="flex-1 px-2 py-1.5 bg-white border border-[#E0E5F2] rounded-lg text-xs font-bold text-[#2B3674] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30"
+                  >
+                    {MEAL_MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                  <div className="flex rounded-lg overflow-hidden border border-[#E0E5F2]">
+                    {(["AM", "PM"] as const).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setField(row.mealType, "editPeriod", p)}
+                        className={`px-2 py-1.5 text-xs font-bold transition-all ${
+                          row.editPeriod === p
+                            ? "bg-[#4318FF] text-white"
+                            : "bg-white text-[#A3AED0] hover:bg-[#F4F7FE]"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cancelEdit(row.mealType)}
+                    disabled={row.saving}
+                    className="flex-1 py-1.5 bg-white hover:bg-[#F4F7FE] text-[#A3AED0] text-xs font-bold rounded-lg border border-[#E0E5F2] transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveEdit(row.mealType)}
+                    disabled={row.saving}
+                    className="flex-1 py-1.5 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white text-xs font-bold rounded-lg transition-all shadow-[0_2px_8px_rgba(67,24,255,0.25)] disabled:opacity-70 flex items-center justify-center gap-1"
+                  >
+                    {row.saving && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2 mt-auto">
+        <button
+          type="button"
+          onClick={() => navigate("/care-events#medication-section")}
+          className="w-full py-2.5 px-4 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white text-xs font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(67,24,255,0.2)] hover:shadow-[0_6px_20px_rgba(67,24,255,0.3)] active:scale-[0.98] flex items-center gap-2"
+        >
+          <Pill className="w-3.5 h-3.5 shrink-0" /> Add Medication Plan
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/care-events#care-event-section")}
+          className="w-full py-2.5 px-4 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white text-xs font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(251,146,60,0.2)] active:scale-[0.98] flex items-center gap-2"
+        >
+          <Heart className="w-3.5 h-3.5 shrink-0" /> Add Care Event
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/care-events#outdoor-event-section")}
+          className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-[0_4px_15px_rgba(52,211,153,0.2)] active:scale-[0.98] flex items-center gap-2"
+        >
+          <MapPin className="w-3.5 h-3.5 shrink-0" /> Add Outdoor Event
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function to24h(hour: string, minute: string, period: string): string {
   let h = parseInt(hour, 10);
@@ -142,10 +385,8 @@ export function DashboardPage() {
     }
   }, [caregiverId]);
 
-  // Fetch caregiver schedules + dashboard summary from API on mount
-  useEffect(() => {
+  const refreshAgenda = useCallback(() => {
     if (!caregiverId) return;
-
     caregiverScheduleService.getSchedules(caregiverId).then((schedules) => {
       setAgenda(
         schedules.map((s) => ({
@@ -158,10 +399,30 @@ export function DashboardPage() {
         })),
       );
     }).catch(() => {});
+  }, [caregiverId]);
+
+  // Fetch caregiver schedules + dashboard summary from API on mount
+  useEffect(() => {
+    if (!caregiverId) return;
+
+    // Guard: only generate meal events once per week per browser session to prevent
+    // duplicate inserts caused by React StrictMode running effects twice concurrently.
+    const todayStr = getMYTDateString();
+    const d = new Date(todayStr + "T00:00:00");
+    const dow = d.getDay();
+    const monday = new Date(d.getTime() + (dow === 0 ? -6 : 1 - dow) * 86400000);
+    const weekKey = `parkicare_meal_week_${caregiverId}_${monday.toISOString().slice(0, 10)}`;
+
+    if (!sessionStorage.getItem(weekKey)) {
+      sessionStorage.setItem(weekKey, "1");
+      generateWeeklyMeals(caregiverId).then(refreshAgenda).catch(() => refreshAgenda());
+    } else {
+      refreshAgenda();
+    }
 
     dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
     dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
-  }, [caregiverId]);
+  }, [caregiverId, refreshAgenda]);
 
   useEffect(() => {
     refreshCompletions();
@@ -493,20 +754,30 @@ export function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Full Width Calendar at Top */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.15 }}
-        className="mb-8"
-      >
-        <CalendarWidget
-          meds={patientMedications}
-          events={patientEventsStore}
-          agenda={agenda}
-          completionKeys={completionKeys}
-        />
-      </motion.div>
+      {/* Calendar + Meal Planner Row */}
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8 items-stretch mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="flex-1 min-w-0"
+        >
+          <CalendarWidget
+            meds={patientMedications}
+            events={patientEventsStore}
+            agenda={agenda}
+            completionKeys={completionKeys}
+          />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.25 }}
+          className="w-full lg:w-72 xl:w-80 shrink-0 h-full"
+        >
+          <MealPlannerPanel caregiverId={caregiverId} navigate={navigate} onSaved={refreshAgenda} />
+        </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
         
