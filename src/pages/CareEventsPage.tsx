@@ -8,8 +8,8 @@ import { drugsService, type DrugBase } from "@/services/drugs";
 import { careEventsService } from "@/services/careEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
 import { scanMedicineLabel } from "@/services/ocr";
-import { HistorySection } from "@/components/HistorySection";
-import type { CareEvent } from "@/context/careEventsContext";
+// import { HistorySection } from "@/components/HistorySection";
+// import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString } from "@/lib/eventRecurrence";
 import { getMealSchedules, type MealScheduleEntry } from "@/services/mealSchedule";
 
@@ -102,7 +102,7 @@ function calculateDoseTimes(
 }
 
 export function CareEventsPage() {
-  const { meds, addMed, deleteMed, events, addEvent, deleteEvent, togglePin, patientId, refresh } = useCareEvents();
+  const { meds, addMed, deleteMed, events, addEvent, deleteEvent, patientId, refresh } = useCareEvents();
   const { user } = useAuth();
   const caregiverId = user?.caregiverId ?? 0;
 
@@ -179,7 +179,6 @@ export function CareEventsPage() {
   const testDrugSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- Care Event state ---
-  const [careEventTitle, setCareEventTitle] = useState("");
   const [careEventType, setCareEventType] = useState("Bathing");
   const [showCareTypeDropdown, setShowCareTypeDropdown] = useState(false);
   const [careEventTimeHour, setCareEventTimeHour] = useState("08");
@@ -194,7 +193,6 @@ export function CareEventsPage() {
   const [careEventRecurrence, setCareEventRecurrence] = useState<"daily" | "weekdays" | "weekly" | "none">("none");
 
   // --- Outdoor Event state ---
-  const [outdoorEventTitle, setOutdoorEventTitle] = useState("");
   const [outdoorEventType, setOutdoorEventType] = useState("Doctor Appointment");
   const [showOutdoorTypeDropdown, setShowOutdoorTypeDropdown] = useState(false);
   const [outdoorEventTimeHour, setOutdoorEventTimeHour] = useState("08");
@@ -508,7 +506,7 @@ export function CareEventsPage() {
     try {
       if (patientId && selectedDrug) {
         try {
-          const created = await careEventsService.createMedication(
+          await careEventsService.createMedication(
             patientId,
             selectedDrug.drugId,
             finalDosage,
@@ -673,7 +671,6 @@ export function CareEventsPage() {
         toast.success("Care event saved locally");
       }
 
-      setCareEventTitle("");
       setCareEventType("Bathing");
       setCareEventTimeHour("08");
       setCareEventTimeMinute("00");
@@ -736,7 +733,6 @@ export function CareEventsPage() {
         toast.success("Outdoor event saved locally");
       }
 
-      setOutdoorEventTitle("");
       setOutdoorEventType("Doctor Appointment");
       setOutdoorEventTimeHour("08");
       setOutdoorEventTimeMinute("00");
