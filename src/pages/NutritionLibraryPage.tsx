@@ -163,7 +163,7 @@ function FilterBar({
         )}
       </div>
 
-      {/* status pills — multi-select, empty = all */}
+      {/* status pills - multi-select, empty = all */}
       <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
         {SAFETY_STATUSES.map(s => {
           const on = activeStatuses.includes(s);
@@ -229,7 +229,7 @@ function CatTabs({ activeCategories, toggleCategory, counts }: {
             }}>All</button>
           );
         })()}
-        {/* Category tabs — multi-select */}
+        {/* Category tabs - multi-select */}
         {FOOD_CATEGORIES.map(c => {
           const on = activeCategories.includes(c);
           return (
@@ -625,7 +625,7 @@ export function NutritionLibraryPage() {
   }
   useEffect(() => { loadFoods(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // client-side filtering — empty arrays mean "all"
+  // client-side filtering - empty arrays mean "all"
   const filtered = useMemo(() =>
     allFoods.filter(f => {
       const mk = !keyword
@@ -736,7 +736,7 @@ export function NutritionLibraryPage() {
         </div>
       )}
 
-      {/* Floating cart button — fixed bottom-right */}
+      {/* Floating cart button - fixed bottom-right */}
       <button
         type="button"
         onClick={() => setCartOpen(true)}

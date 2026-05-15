@@ -36,12 +36,13 @@ export const CareEventsProvider = ({ children }: { children: ReactNode }) => {
 
       const mappedMeds: Medication[] = apiMeds.map((m, i) => ({
         id: m.remindId,
+        planId: m.planId,
         remindId: m.remindId,
         drugId: m.drugId,
         name: drugNames[i],
         dose: m.dosage,
         frequency: m.frequency,
-        time: m.remindTime,
+        time: m.adminTime ?? m.remindTime,
         startDate: m.startDate,
         endDate: m.endDate ?? undefined,
         recurrence: m.recurrence ?? undefined,

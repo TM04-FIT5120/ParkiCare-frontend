@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChefHat, Loader2, AlertTriangle, ChevronDown, ChevronUp, UtensilsCrossed } from "lucide-react";
+import { ChefHat, Loader2, AlertTriangle, ChevronDown, ChevronUp, UtensilsCrossed, Utensils, Cookie, Coffee } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { recipeService, type GeneratedRecipe } from "@/services/recipe";
@@ -26,23 +26,31 @@ function formatDate(dateStr: string): string {
   }
 }
 
+type CategoryMeta = { label: string; colorClass: string; bgClass: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+
+const CATEGORY_META: Record<string, CategoryMeta> = {
+  MAIN:    { label: "Main Dish", colorClass: "text-[#4318FF]", bgClass: "bg-[#EEF2FF]",    icon: Utensils },
+  SIDE:    { label: "Side",      colorClass: "text-emerald-700", bgClass: "bg-emerald-50", icon: Utensils },
+  DESSERT: { label: "Dessert",   colorClass: "text-pink-700",    bgClass: "bg-pink-50",    icon: Cookie   },
+  SNACK:   { label: "Snack",     colorClass: "text-amber-700",   bgClass: "bg-amber-50",   icon: Coffee   },
+};
+
+function getCategoryMeta(category: string | null | undefined): CategoryMeta | null {
+  return category ? (CATEGORY_META[category] ?? null) : null;
+}
+
 function HighProteinWarning({ warning, source }: { warning: string; source: string | null }) {
   return (
-    <div style={{
-      background: "#FFFBEB", border: "1.5px solid #FCD34D", borderRadius: 12,
-      padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8,
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <AlertTriangle size={18} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
-        <p style={{ fontSize: 13, fontWeight: 700, color: "#78350F", lineHeight: 1.5 }}>
-          {warning}
-        </p>
+    <div className="bg-[#FFFBEB] border-[1.5px] border-[#FCD34D] rounded-xl px-4 py-3.5 flex flex-col gap-2">
+      <div className="flex items-start gap-2.5">
+        <AlertTriangle size={18} className="text-[#D97706] shrink-0 mt-0.5" />
+        <p className="text-[13px] font-bold text-[#78350F] leading-snug">{warning}</p>
       </div>
       {source && (
-        <p style={{ fontSize: 11, color: "#92400E", paddingLeft: 28, lineHeight: 1.5 }}>
-          Source: {source.startsWith("http") ? (
-            <a href={source} target="_blank" rel="noopener noreferrer"
-              style={{ color: "#B45309", textDecoration: "underline" }}>
+        <p className="text-[11px] text-[#92400E] pl-7 leading-snug">
+          Source:{" "}
+          {source.startsWith("http") ? (
+            <a href={source} target="_blank" rel="noopener noreferrer" className="text-[#B45309] underline">
               {source}
             </a>
           ) : source}
@@ -55,51 +63,55 @@ function HighProteinWarning({ warning, source }: { warning: string; source: stri
 function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: boolean }) {
   const ingredients = parseJsonArray(recipe.ingredients);
   const steps = parseJsonArray(recipe.steps);
+  const meta = getCategoryMeta(recipe.category);
 
   return (
-    <div style={{
-      background: "#fff", borderRadius: 16,
-      border: isLatest ? "2px solid #4318FF" : "1px solid #E0E5F2",
-      boxShadow: isLatest ? "0 8px 32px rgba(67,24,255,.14)" : "0 2px 12px rgba(112,144,176,.08)",
-      overflow: "hidden",
-    }}>
+    <div className={`rounded-2xl overflow-hidden bg-white ${
+      isLatest
+        ? "border-2 border-[#4318FF] shadow-[0_8px_32px_rgba(67,24,255,.14)]"
+        : "border border-[#E0E5F2] shadow-[0_2px_12px_rgba(112,144,176,.08)]"
+    }`}>
       {/* Header */}
-      <div style={{
-        padding: "16px 20px",
-        background: isLatest ? "linear-gradient(135deg,#4318FF,#6B35FF)" : "#F8FAFF",
-        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <ChefHat size={18} color={isLatest ? "#fff" : "#4318FF"} />
-          <h2 style={{ fontWeight: 800, fontSize: isLatest ? 16 : 14, color: isLatest ? "#fff" : "#2B3674", margin: 0 }}>
+      <div className={`px-5 py-4 flex items-center justify-between gap-3 ${
+        isLatest ? "bg-gradient-to-br from-[#4318FF] to-[#6B35FF]" : "bg-[#F8FAFF]"
+      }`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <ChefHat size={18} className={isLatest ? "text-white shrink-0" : "text-[#4318FF] shrink-0"} />
+          <h2 className={`font-extrabold break-words ${isLatest ? "text-base text-white" : "text-sm text-[#2B3674]"}`}>
             {recipe.recipeTitle || "Untitled Recipe"}
           </h2>
         </div>
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 99,
-          background: isLatest ? "rgba(255,255,255,.2)" : "#EEF2FF",
-          color: isLatest ? "#fff" : "#4318FF",
-        }}>
-          {isLatest ? "Latest" : formatDate(recipe.createdAt)}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {meta && (
+            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+              isLatest ? "bg-white/20 text-white" : `${meta.bgClass} ${meta.colorClass}`
+            }`}>
+              {meta.label}
+            </span>
+          )}
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+            isLatest ? "bg-white/20 text-white" : "bg-[#EEF2FF] text-[#4318FF]"
+          }`}>
+            {isLatest ? "Latest" : formatDate(recipe.createdAt)}
+          </span>
+        </div>
       </div>
 
-      <div style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* High Protein Warning */}
+      {/* Body */}
+      <div className="p-5 flex flex-col gap-4">
         {recipe.highProteinWarning && (
           <HighProteinWarning warning={recipe.highProteinWarning} source={recipe.referenceSource ?? null} />
         )}
 
-        {/* Ingredients */}
         {ingredients.length > 0 && (
           <div>
-            <h3 style={{ fontSize: 12, fontWeight: 800, color: "#A3AED0", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 10 }}>
+            <h3 className="text-[11px] font-extrabold text-[#A3AED0] uppercase tracking-widest mb-2.5">
               Ingredients
             </h3>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            <ul className="flex flex-col gap-1.5">
               {ingredients.map((ing, i) => (
-                <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#2B3674" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4318FF", flexShrink: 0, marginTop: 5 }} />
+                <li key={i} className="flex items-start gap-2 text-[13px] text-[#2B3674]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4318FF] shrink-0 mt-[5px]" />
                   {ing}
                 </li>
               ))}
@@ -107,60 +119,52 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
           </div>
         )}
 
-        {/* Steps */}
         {steps.length > 0 && (
           <div>
-            <h3 style={{ fontSize: 12, fontWeight: 800, color: "#A3AED0", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 10 }}>
+            <h3 className="text-[11px] font-extrabold text-[#A3AED0] uppercase tracking-widest mb-2.5">
               Preparation Steps
             </h3>
-            <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            <ol className="flex flex-col gap-2.5">
               {steps.map((step, i) => (
-                <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  <span style={{
-                    flexShrink: 0, width: 24, height: 24, borderRadius: "50%",
-                    background: "linear-gradient(135deg,#4318FF,#6B35FF)",
-                    color: "#fff", fontSize: 11, fontWeight: 800,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>{i + 1}</span>
-                  <p style={{ fontSize: 13, color: "#2B3674", lineHeight: 1.6, margin: 0 }}>{step}</p>
+                <li key={i} className="flex items-start gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-[#4318FF] to-[#6B35FF] text-white text-[11px] font-extrabold flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                  <p className="text-[13px] text-[#2B3674] leading-relaxed mt-0.5">{step}</p>
                 </li>
               ))}
             </ol>
           </div>
         )}
 
-        {/* Suitable / Health Tip */}
         {(recipe.suitableDesc || recipe.healthTip) && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="flex flex-col gap-2.5">
             {recipe.suitableDesc && (
-              <div style={{ background: "#F0FDF4", borderRadius: 10, padding: "12px 14px", border: "1px solid #A7F3D0" }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#059669", letterSpacing: ".06em", textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+              <div className="bg-[#F0FDF4] rounded-xl px-3.5 py-3 border border-[#A7F3D0]">
+                <span className="text-[10px] font-extrabold text-[#059669] uppercase tracking-widest block mb-1">
                   Why it's suitable
                 </span>
-                <p style={{ fontSize: 12, color: "#065F46", lineHeight: 1.6, margin: 0 }}>{recipe.suitableDesc}</p>
+                <p className="text-xs text-[#065F46] leading-relaxed">{recipe.suitableDesc}</p>
               </div>
             )}
             {recipe.healthTip && (
-              <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "12px 14px", border: "1px solid #C7D2FE" }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: "#4318FF", letterSpacing: ".06em", textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+              <div className="bg-[#EEF2FF] rounded-xl px-3.5 py-3 border border-[#C7D2FE]">
+                <span className="text-[10px] font-extrabold text-[#4318FF] uppercase tracking-widest block mb-1">
                   Health Tip
                 </span>
-                <p style={{ fontSize: 12, color: "#312E81", lineHeight: 1.6, margin: 0 }}>{recipe.healthTip}</p>
+                <p className="text-xs text-[#312E81] leading-relaxed">{recipe.healthTip}</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Ingredients used */}
-        {recipe.inputFoods && (
-          <p style={{ fontSize: 11, color: "#A3AED0", borderTop: "1px solid #F4F7FE", paddingTop: 12, margin: 0 }}>
-            Made from: {recipe.inputFoods}
+        {ingredients.length > 0 && (
+          <p className="text-[11px] text-[#A3AED0] border-t border-[#F4F7FE] pt-3">
+            Made from: {ingredients.join(", ")}
           </p>
         )}
         {isLatest && (
-          <p style={{ fontSize: 10, color: "#A3AED0", margin: 0 }}>
-            Generated: {formatDate(recipe.createdAt)}
-          </p>
+          <p className="text-[10px] text-[#A3AED0]">Generated: {formatDate(recipe.createdAt)}</p>
         )}
       </div>
     </div>
@@ -169,27 +173,31 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
 
 function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
   const [open, setOpen] = useState(false);
+  const meta = getCategoryMeta(recipe.category);
 
   return (
-    <div style={{ border: "1px solid #E0E5F2", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+    <div className="border border-[#E0E5F2] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        style={{
-          width: "100%", padding: "14px 16px", background: "none", border: "none",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          cursor: "pointer", gap: 12,
-        }}
+        className="w-full px-4 py-3.5 flex items-center justify-between gap-3 cursor-pointer bg-transparent border-none"
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <ChefHat size={15} color="#4318FF" style={{ flexShrink: 0 }} />
-          <span style={{ fontWeight: 700, fontSize: 13, color: "#2B3674", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <ChefHat size={15} className="text-[#4318FF] shrink-0" />
+          <span className="font-bold text-[13px] text-[#2B3674] break-words">
             {recipe.recipeTitle || "Untitled Recipe"}
           </span>
+          {meta && (
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${meta.bgClass} ${meta.colorClass}`}>
+              {meta.label}
+            </span>
+          )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 10, color: "#A3AED0" }}>{formatDate(recipe.createdAt)}</span>
-          {open ? <ChevronUp size={15} color="#A3AED0" /> : <ChevronDown size={15} color="#A3AED0" />}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] text-[#A3AED0]">{formatDate(recipe.createdAt)}</span>
+          {open
+            ? <ChevronUp size={15} className="text-[#A3AED0]" />
+            : <ChevronDown size={15} className="text-[#A3AED0]" />}
         </div>
       </button>
       <AnimatePresence initial={false}>
@@ -200,9 +208,9 @@ function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            style={{ overflow: "hidden" }}
+            className="overflow-hidden"
           >
-            <div style={{ borderTop: "1px solid #F4F7FE" }}>
+            <div className="border-t border-[#F4F7FE]">
               <RecipeCard recipe={recipe} isLatest={false} />
             </div>
           </motion.div>
@@ -218,6 +226,9 @@ export function RecipesPage() {
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllPast, setShowAllPast] = useState(false);
+
+  const PAST_PREVIEW_COUNT = 5;
 
   useEffect(() => {
     if (!user) return;
@@ -226,7 +237,15 @@ export function RecipesPage() {
       .catch(() => { setError("Failed to load recipes. Please try again."); setLoading(false); });
   }, [user]);
 
-  const [latest, ...past] = recipes;
+  // Group the most recent generation batch by createdAt minute (recipes generated
+  // in the same call share the same timestamp within seconds).
+  const latestMinute = recipes[0]?.createdAt?.slice(0, 16) ?? null;
+  const latestGroup = latestMinute ? recipes.filter(r => r.createdAt.slice(0, 16) === latestMinute) : [];
+  const pastRecipes = latestMinute ? recipes.filter(r => r.createdAt.slice(0, 16) !== latestMinute) : [];
+
+  const mainRecipes = latestGroup.filter(r => !r.category || r.category === "MAIN");
+  const sideRecipes = latestGroup.filter(r => r.category === "SIDE" || r.category === "DESSERT" || r.category === "SNACK");
+  const hasBothColumns = mainRecipes.length > 0 && sideRecipes.length > 0;
 
   return (
     <div className="pb-20">
@@ -239,50 +258,144 @@ export function RecipesPage() {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "96px 0" }}>
-          <Loader2 size={32} color="#4318FF" className="animate-spin" />
+        <div className="flex items-center justify-center py-24">
+          <Loader2 size={32} className="text-[#4318FF] animate-spin" />
         </div>
       ) : error ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "80px 0" }}>
-          <p style={{ fontWeight: 700, fontSize: 14, color: "#EF4444" }}>{error}</p>
-          <button type="button"
-            onClick={() => { setLoading(true); setError(null); recipeService.getRecipeHistory(user!.caregiverId).then(d => { setRecipes(d); setLoading(false); }).catch(() => { setError("Failed to load recipes."); setLoading(false); }); }}
-            style={{ padding: "8px 18px", background: "#4318FF", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+        <div className="flex flex-col items-center gap-3 py-20">
+          <p className="font-bold text-sm text-red-500">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              recipeService.getRecipeHistory(user!.caregiverId)
+                .then(d => { setRecipes(d); setLoading(false); })
+                .catch(() => { setError("Failed to load recipes."); setLoading(false); });
+            }}
+            className="px-4 py-2 bg-[#4318FF] text-white rounded-xl font-bold text-xs"
+          >
             Retry
           </button>
         </div>
-      ) : !latest ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "80px 0", textAlign: "center" }}>
-          <UtensilsCrossed size={56} color="#E0E5F2" />
-          <p style={{ fontWeight: 700, fontSize: 15, color: "#2B3674" }}>No recipes generated yet</p>
-          <p style={{ fontSize: 13, color: "#A3AED0", maxWidth: 320, lineHeight: 1.6 }}>
+      ) : recipes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+          <UtensilsCrossed size={56} className="text-[#E0E5F2]" />
+          <p className="font-bold text-[15px] text-[#2B3674]">No recipes generated yet</p>
+          <p className="text-[13px] text-[#A3AED0] max-w-xs leading-relaxed">
             Go to the Nutrition Library to build your basket and generate your first recipe.
           </p>
-          <button type="button"
+          <button
+            type="button"
             onClick={() => navigate("/nutrition-library")}
-            style={{ padding: "10px 22px", background: "linear-gradient(90deg,#4318FF,#6B35FF)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            className="px-5 py-2.5 bg-gradient-to-r from-[#4318FF] to-[#6B35FF] text-white rounded-xl font-bold text-[13px]"
+          >
             Go to Nutrition Library
           </button>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-          {/* Latest Recipe */}
+        <div className="flex flex-col gap-8">
+          {/* ── Latest Generated Recipe(s) ─────────────────────────────────── */}
           <section>
-            <p style={{ fontSize: 11, fontWeight: 800, color: "#A3AED0", letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 12 }}>
+            <p className="text-[11px] font-extrabold text-[#A3AED0] tracking-[.08em] uppercase mb-3">
               Latest Generated Recipe
             </p>
-            <RecipeCard recipe={latest} isLatest={true} />
+
+            {hasBothColumns ? (
+              /* Case A - Main + Sides: dual-column layout */
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                {/* Left: Main Dish */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#EEF2FF] flex items-center justify-center">
+                      <Utensils size={14} className="text-[#4318FF]" />
+                    </div>
+                    <span className="text-xs font-extrabold text-[#4318FF] uppercase tracking-widest">
+                      Main Dish
+                    </span>
+                  </div>
+                  {mainRecipes.map(r => (
+                    <motion.div
+                      key={r.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      <RecipeCard recipe={r} isLatest={true} />
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Right: Sides / Desserts / Snacks */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <Cookie size={14} className="text-emerald-700" />
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-700 uppercase tracking-widest">
+                      Sides
+                    </span>
+                  </div>
+                  {sideRecipes.map(r => (
+                    <motion.div
+                      key={r.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.1 }}
+                    >
+                      <RecipeCard recipe={r} isLatest={true} />
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Case B - Main only: full-width */
+              <div className="flex flex-col gap-4">
+                {latestGroup.map((r, i) => (
+                  <motion.div
+                    key={r.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: i * 0.08 }}
+                  >
+                    <RecipeCard recipe={r} isLatest={true} />
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </section>
 
-          {/* Past Recipes */}
-          {past.length > 0 && (
+          {/* ── Past Recipes ───────────────────────────────────────────────── */}
+          {pastRecipes.length > 0 && (
             <section>
-              <p style={{ fontSize: 11, fontWeight: 800, color: "#A3AED0", letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 12 }}>
-                Past Recipes ({past.length})
+              <p className="text-[11px] font-extrabold text-[#A3AED0] tracking-[.08em] uppercase mb-3">
+                Past Recipes ({pastRecipes.length})
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {past.map(r => <PastRecipeAccordion key={r.id} recipe={r} />)}
+              <div className="flex flex-col gap-2">
+                {(showAllPast ? pastRecipes : pastRecipes.slice(0, PAST_PREVIEW_COUNT)).map(r => (
+                  <PastRecipeAccordion key={r.id} recipe={r} />
+                ))}
               </div>
+
+              {pastRecipes.length > PAST_PREVIEW_COUNT && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllPast(v => !v)}
+                  className="mt-3 w-full py-2.5 flex items-center justify-center gap-2 rounded-xl border border-[#E0E5F2] bg-white hover:bg-[#F4F7FE] text-[#4318FF] text-xs font-bold transition-all"
+                >
+                  {showAllPast ? (
+                    <>
+                      <ChevronUp size={14} />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown size={14} />
+                      Show {pastRecipes.length - PAST_PREVIEW_COUNT} More
+                    </>
+                  )}
+                </button>
+              )}
             </section>
           )}
         </div>

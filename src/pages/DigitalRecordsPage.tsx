@@ -204,11 +204,12 @@ export function DigitalRecordsPage() {
 
           {/* Date range selector */}
           <div className="mb-4">
-            <p className="text-sm font-bold text-[#A3AED0] uppercase tracking-wide mb-3">Data Scope:</p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <span className="text-sm font-bold text-[#A3AED0] uppercase tracking-wide">Data Scope:</span>
             <div className="relative w-full sm:w-auto">
               <button
                 onClick={() => setShowDropdown1(!showDropdown1)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-[#E0E5F2] rounded-xl text-sm font-bold text-[#2B3674] hover:border-[#4318FF] transition-all w-full sm:min-w-[280px] justify-between"
+                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-[#E0E5F2] rounded-xl text-sm font-bold text-[#2B3674] hover:border-[#4318FF] transition-all w-full sm:min-w-[200px] justify-between"
               >
                 <span className="flex items-center gap-2">
                   <CalendarSync className="w-4 h-4 text-[#4318FF]" />
@@ -234,6 +235,7 @@ export function DigitalRecordsPage() {
                   ))}
                 </div>
               )}
+            </div>
             </div>
 
             {reportMode1 === "custom" && (
@@ -383,19 +385,19 @@ export function DigitalRecordsPage() {
                 <div className="p-4 sm:p-6 rounded-[20px] bg-[#E9E3FF] border-none text-center">
                   <p className="text-xs sm:text-sm font-bold text-[#4318FF] uppercase tracking-widest mb-1">Frequency Achievement</p>
                   <p className="text-3xl sm:text-4xl font-black text-[#4318FF]">
-                    {medicationReport ? `${medicationReport.overallCompletionRate.toFixed(1)}%` : "—"}
+                    {medicationReport ? `${medicationReport.overallCompletionRate.toFixed(1)}%` : "-"}
                   </p>
                 </div>
                 <div className="p-4 sm:p-6 rounded-[20px] bg-green-50 border-none text-center">
                   <p className="text-xs sm:text-sm font-bold text-green-600 uppercase tracking-widest mb-1">Success Days</p>
                   <p className="text-3xl sm:text-4xl font-black text-green-600">
-                    {medicationReport ? medicationReport.dailySummaries.filter(d => d.status === "SUCCESS").length : "—"}
+                    {medicationReport ? medicationReport.dailySummaries.filter(d => d.status === "SUCCESS").length : "-"}
                   </p>
                 </div>
                 <div className="p-4 sm:p-6 rounded-[20px] bg-red-50 border-none text-center">
                   <p className="text-xs sm:text-sm font-bold text-red-500 uppercase tracking-widest mb-1">Incomplete Days</p>
                   <p className="text-3xl sm:text-4xl font-black text-red-500">
-                    {medicationReport ? medicationReport.dailySummaries.filter(d => d.status === "INCOMPLETE").length : "—"}
+                    {medicationReport ? medicationReport.dailySummaries.filter(d => d.status === "INCOMPLETE").length : "-"}
                   </p>
                 </div>
               </div>

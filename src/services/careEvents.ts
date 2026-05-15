@@ -3,11 +3,13 @@ import api from "@/lib/api";
 // --- Medication types ---
 export interface MedicationPlan {
   remindId: number;
+  planId: number;           // groups all reminders that belong to the same medication plan
   patientId: number;
   drugId: number;
   dosage: string;
   frequency: string;
   adminTimes: string;
+  adminTime: string;        // this reminder's specific administration time (HH:MM:SS)
   remindTime: string;
   startDate: string;
   planNote: string;
@@ -137,6 +139,10 @@ export const careEventsService = {
 
   snoozeMedication: async (remindId: number, caregiverId: number): Promise<void> => {
     await api.patch(`/reminder/later/${remindId}?caregiverId=${caregiverId}`);
+  },
+
+  savePlanNote: async (remindId: number, caregiverId: number, planNote: string): Promise<void> => {
+    await api.patch(`/reminder/plan-note/${remindId}?caregiverId=${caregiverId}`, { planNote });
   },
 
   getPendingReminders: async (patientId: number, caregiverId: number): Promise<MedicationPlan[]> => {

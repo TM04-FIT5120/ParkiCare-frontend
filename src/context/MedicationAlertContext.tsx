@@ -11,12 +11,17 @@ interface MedicationAlertContextValue {
   pendingAlert: MedicationAlert | null;
   dispatchAlert: (alert: MedicationAlert) => void;
   dismissAlert: () => void;
+  pendingObservationAlert: MedicationAlert | null;
+  dispatchObservationAlert: (alert: MedicationAlert) => void;
+  dismissObservationAlert: () => void;
 }
 
 const MedicationAlertContext = createContext<MedicationAlertContextValue | null>(null);
 
 export function MedicationAlertProvider({ children }: { children: ReactNode }) {
   const [pendingAlert, setPendingAlert] = useState<MedicationAlert | null>(null);
+  const [pendingObservationAlert, setPendingObservationAlert] = useState<MedicationAlert | null>(null);
+
   // Track the snooze timeout so it can be cleared if a new alert for the same
   // remindId arrives from FCM before the client-side timer fires.
   const snoozeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,8 +49,24 @@ export function MedicationAlertProvider({ children }: { children: ReactNode }) {
     setPendingAlert(null);
   }, []);
 
+  const dispatchObservationAlert = useCallback((alert: MedicationAlert) => {
+    console.log('[MedicationAlertContext] dispatchObservationAlert called:', JSON.stringify(alert));
+    setPendingObservationAlert((prev) => {
+      if (prev?.remindId === alert.remindId) return prev;
+      return alert;
+    });
+  }, []);
+
+  const dismissObservationAlert = useCallback(() => {
+    console.log('[MedicationAlertContext] dismissObservationAlert called.');
+    setPendingObservationAlert(null);
+  }, []);
+
   return (
-    <MedicationAlertContext.Provider value={{ pendingAlert, dispatchAlert, dismissAlert }}>
+    <MedicationAlertContext.Provider value={{
+      pendingAlert, dispatchAlert, dismissAlert,
+      pendingObservationAlert, dispatchObservationAlert, dismissObservationAlert,
+    }}>
       {children}
     </MedicationAlertContext.Provider>
   );
@@ -55,6 +76,11 @@ export function useMedicationAlert(): MedicationAlertContextValue {
   const ctx = useContext(MedicationAlertContext);
   if (!ctx) throw new Error("useMedicationAlert must be used within MedicationAlertProvider");
   return ctx;
+}
+
+export function useObservationAlert() {
+  const { pendingObservationAlert, dispatchObservationAlert, dismissObservationAlert } = useMedicationAlert();
+  return { pendingObservationAlert, dispatchObservationAlert, dismissObservationAlert };
 }
 
 /** Exposed so DashboardPage can schedule a re-show after snooze. */

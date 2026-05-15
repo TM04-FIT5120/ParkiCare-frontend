@@ -1,6 +1,6 @@
 import api from "@/lib/api";
 
-// Response shape from POST /api/ocr/drug (Qwen OCR — no Google credentials needed)
+// Response shape from POST /api/ocr/drug (Qwen OCR - no Google credentials needed)
 interface DrugOcrVO {
   medicineName: string;
   capacity: string;      // dosage strength, e.g. "250mg"

@@ -553,7 +553,7 @@ export function PerkinsDetailsPage() {
             </div>
 
             <p className="text-white/80 text-sm leading-relaxed mb-4">
-              MIASA (Mental Illness Awareness &amp; Support Association) is a Malaysian NGO dedicated to breaking mental health stigma and providing crisis support, counselling, and peer support services — free and subsidised for those in need.
+              MIASA (Mental Illness Awareness &amp; Support Association) is a Malaysian NGO dedicated to breaking mental health stigma and providing crisis support, counselling, and peer support services - free and subsidised for those in need.
             </p>
 
             <div className="space-y-2 mb-5">
