@@ -89,7 +89,7 @@
 .nl-no-scroll::-webkit-scrollbar { display: none; }
 .nl-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Filter bar bleed — matches AppLayout main padding per breakpoint */
+/* Filter bar bleed - matches AppLayout main padding per breakpoint */
 .nl-filter-bleed {
   margin-left: -16px;
   margin-right: -16px;

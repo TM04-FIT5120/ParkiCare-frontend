@@ -1,6 +1,6 @@
-# ParkiCare — Frontend
+# ParkiCare - Frontend
 
-A web application designed to help caregivers manage and monitor Parkinson's disease patients. ParkiCare provides medication scheduling, nutrition planning, care event tracking, digital record management, and push notification reminders — all in a mobile-friendly, multilingual interface.
+A web application designed to help caregivers manage and monitor Parkinson's disease patients. ParkiCare provides medication scheduling, nutrition planning, care event tracking, digital record management, and push notification reminders - all in a mobile-friendly, multilingual interface.
 
 ---
 
@@ -283,7 +283,7 @@ ParkiCare uses **Firebase Cloud Messaging** to send medication reminders.
 The app supports three languages, selectable from the navigation bar:
 
 - English (`en`)
-- 中文 — Chinese (`zh`)
+- 中文 - Chinese (`zh`)
 - Bahasa Melayu (`ms`)
 
 Language selection is managed inside `AppLayout.tsx`. If you are adding new UI strings, ensure they are added for all three locales.

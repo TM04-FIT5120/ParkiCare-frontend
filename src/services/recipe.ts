@@ -2,6 +2,7 @@ import api from "../lib/api";
 
 export interface RecipeItem {
   recipeTitle: string;
+  category: "MAIN" | "SIDE" | "DESSERT" | "SNACK";
   ingredients: string[];
   steps: string[];
   suitableDesc: string;
@@ -20,6 +21,7 @@ export interface GeneratedRecipe {
   caregiverId: number;
   inputFoods: string;
   recipeTitle: string;
+  category: "MAIN" | "SIDE" | "DESSERT" | "SNACK" | null;
   ingredients: string;
   steps: string;
   suitableDesc: string;

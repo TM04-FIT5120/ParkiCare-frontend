@@ -4,13 +4,14 @@ import { messaging } from '@/lib/firebase';
 import { registerPushToken } from '@/services/pushNotifications';
 import { fetchPendingRemindersForCaregiver } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { useMedicationAlert, type MedicationAlert } from '@/context/MedicationAlertContext';
+import { useMedicationAlert, useObservationAlert, type MedicationAlert } from '@/context/MedicationAlertContext';
 
-const VAPID_KEY = 'BO-VIv4NIIiqsoHglpLaLT6oVsRTmqXW8bV3CvotCOs677zl8M0pytv26Wi61lKvaQmDxo4nhNdGBHkE9fGS6W4';
+const VAPID_KEY = 'BH1JP4ACAB7h_Uo7ff3i-nBRkyjohledN0qqwqBKWJukUhcm7vGrBbAbZJQYTQnLa-cgHnAUefzuvr-BAFmBMpI';
 
 const STORAGE_KEY_PREFIX = 'fcm_token_';
 const DEVICE_ID_STORAGE_KEY = 'pc_device_id';
 const ALERT_STORAGE_KEY = 'pc_pending_medication_alert';
+const OBS_ALERT_STORAGE_KEY = 'pc_pending_observation_alert';
 const ALERT_TTL_MS = 12 * 60 * 60 * 1000; // 12h safety window
 
 function getOrCreateDeviceId(): string {
@@ -49,29 +50,21 @@ function normalizeAlert(input: any): MedicationAlert | null {
 function persistAlert(alert: MedicationAlert) {
   localStorage.setItem(
     ALERT_STORAGE_KEY,
-    JSON.stringify({
-      ...alert,
-      receivedAt: Date.now(),
-    }),
+    JSON.stringify({ ...alert, receivedAt: Date.now() }),
   );
 }
 
 function consumeStoredAlert(): MedicationAlert | null {
   const raw = localStorage.getItem(ALERT_STORAGE_KEY);
   if (!raw) return null;
-
   try {
     const parsed = JSON.parse(raw);
     if (!parsed?.receivedAt || Date.now() - parsed.receivedAt > ALERT_TTL_MS) {
       localStorage.removeItem(ALERT_STORAGE_KEY);
       return null;
     }
-
     const alert = normalizeAlert(parsed);
-
-    // One-shot replay: remove once consumed so it does not re-open forever.
     localStorage.removeItem(ALERT_STORAGE_KEY);
-
     return alert;
   } catch {
     localStorage.removeItem(ALERT_STORAGE_KEY);
@@ -79,9 +72,35 @@ function consumeStoredAlert(): MedicationAlert | null {
   }
 }
 
+function persistObservationAlert(alert: MedicationAlert) {
+  localStorage.setItem(
+    OBS_ALERT_STORAGE_KEY,
+    JSON.stringify({ ...alert, receivedAt: Date.now() }),
+  );
+}
+
+function consumeStoredObservationAlert(): MedicationAlert | null {
+  const raw = localStorage.getItem(OBS_ALERT_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed?.receivedAt || Date.now() - parsed.receivedAt > ALERT_TTL_MS) {
+      localStorage.removeItem(OBS_ALERT_STORAGE_KEY);
+      return null;
+    }
+    const alert = normalizeAlert(parsed);
+    localStorage.removeItem(OBS_ALERT_STORAGE_KEY);
+    return alert;
+  } catch {
+    localStorage.removeItem(OBS_ALERT_STORAGE_KEY);
+    return null;
+  }
+}
+
 export function usePushNotifications() {
   const { user } = useAuth();
   const { dispatchAlert } = useMedicationAlert();
+  const { dispatchObservationAlert } = useObservationAlert();
 
   const dispatchAndPersist = useCallback(
     (alert: MedicationAlert) => {
@@ -90,6 +109,15 @@ export function usePushNotifications() {
       dispatchAlert(alert);
     },
     [dispatchAlert],
+  );
+
+  const dispatchObservationAndPersist = useCallback(
+    (alert: MedicationAlert) => {
+      console.log('[PushNotifications] dispatchObservationAndPersist called:', JSON.stringify(alert));
+      persistObservationAlert(alert);
+      dispatchObservationAlert(alert);
+    },
+    [dispatchObservationAlert],
   );
 
   useEffect(() => {
@@ -147,19 +175,20 @@ export function usePushNotifications() {
 
     register();
 
-    // Replay alert when tab becomes active again.
-    const replayStoredAlert = (source: string) => {
-      console.log('[PushNotifications] replayStoredAlert triggered from:', source);
+    // Replay stored alerts when tab becomes active.
+    const replayStoredAlerts = (source: string) => {
+      console.log('[PushNotifications] replayStoredAlerts triggered from:', source);
       const pending = consumeStoredAlert();
-      console.log('[PushNotifications] replayStoredAlert - stored alert:', pending ? JSON.stringify(pending) : 'none');
       if (pending) dispatchAlert(pending);
+      const pendingObs = consumeStoredObservationAlert();
+      if (pendingObs) dispatchObservationAlert(pendingObs);
     };
 
-    replayStoredAlert('mount');
+    replayStoredAlerts('mount');
 
-    const onWindowFocus = () => replayStoredAlert('window focus');
+    const onWindowFocus = () => replayStoredAlerts('window focus');
     const onVisibility = () => {
-      if (!document.hidden) replayStoredAlert('visibilitychange');
+      if (!document.hidden) replayStoredAlerts('visibilitychange');
     };
 
     window.addEventListener('focus', onWindowFocus);
@@ -170,6 +199,8 @@ export function usePushNotifications() {
     const unsubscribe = onMessage(messaging, async (payload) => {
       console.log('[PushNotifications] onMessage fired! Full payload:', JSON.stringify(payload));
       try {
+        const fcmType = payload.data?.type ?? 'MEDICATION_REMINDER';
+
         // Try to build the alert from FCM data fields first.
         // FCM Web Push often strips data fields, so fall back to fetching
         // pending reminders from the API when remindId/caregiverId are absent.
@@ -198,8 +229,14 @@ export function usePushNotifications() {
           }
         }
 
-        console.log('[PushNotifications] onMessage - final alert:', alert ? JSON.stringify(alert) : 'NULL');
-        if (alert) dispatchAndPersist(alert);
+        console.log('[PushNotifications] onMessage - final alert:', alert ? JSON.stringify(alert) : 'NULL', '| type:', fcmType);
+        if (alert) {
+          if (fcmType === 'OBSERVATION_REMINDER') {
+            dispatchObservationAndPersist(alert);
+          } else {
+            dispatchAndPersist(alert);
+          }
+        }
       } catch (err) {
         console.error('[PushNotifications] onMessage handler error:', err);
       }
@@ -213,10 +250,17 @@ export function usePushNotifications() {
       broadcastChannel.onmessage = (event: MessageEvent) => {
         console.log('[PushNotifications] BroadcastChannel message received:', JSON.stringify(event.data));
         const type = event.data?.type;
+        const fcmType = event.data?.fcmType ?? 'MEDICATION_REMINDER';
         if (type === 'MEDICATION_ALERT') {
           const alert = normalizeAlert(event.data);
           console.log('[PushNotifications] BroadcastChannel - alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
-          if (alert) dispatchAndPersist(alert);
+          if (alert) {
+            if (fcmType === 'OBSERVATION_REMINDER') {
+              dispatchObservationAndPersist(alert);
+            } else {
+              dispatchAndPersist(alert);
+            }
+          }
         } else if (type === 'NOTIFICATION_RECEIVED') {
           // FCM stripped data fields - fetch pending reminder from API.
           console.log('[PushNotifications] BroadcastChannel - NOTIFICATION_RECEIVED, fetching from API...');
@@ -250,10 +294,17 @@ export function usePushNotifications() {
     const onServiceWorkerMessage = (event: MessageEvent) => {
       console.log('[PushNotifications] serviceWorker.onmessage received:', JSON.stringify(event.data));
       const type = event.data?.type;
+      const fcmType = event.data?.fcmType ?? 'MEDICATION_REMINDER';
       if (type === 'MEDICATION_ALERT') {
         const alert = normalizeAlert(event.data);
         console.log('[PushNotifications] serviceWorker.onmessage - alert after normalize:', alert ? JSON.stringify(alert) : 'NULL');
-        if (alert) dispatchAndPersist(alert);
+        if (alert) {
+          if (fcmType === 'OBSERVATION_REMINDER') {
+            dispatchObservationAndPersist(alert);
+          } else {
+            dispatchAndPersist(alert);
+          }
+        }
       } else if (type === 'NOTIFICATION_RECEIVED') {
         // FCM stripped data fields - fetch pending reminder from API.
         console.log('[PushNotifications] serviceWorker.onmessage - NOTIFICATION_RECEIVED, fetching from API...');
@@ -289,5 +340,5 @@ export function usePushNotifications() {
       window.removeEventListener('focus', onWindowFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [user?.caregiverId, dispatchAlert, dispatchAndPersist]);
+  }, [user?.caregiverId, dispatchAlert, dispatchObservationAlert, dispatchAndPersist, dispatchObservationAndPersist]);
 }
