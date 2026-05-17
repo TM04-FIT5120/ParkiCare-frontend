@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import { CareEventsProvider } from "@/context/CareEventsProvider";
 import { MedicationAlertProvider, useMedicationAlert } from "@/context/MedicationAlertContext";
 import { NutritionCartProvider } from "@/context/NutritionCartContext";
@@ -33,11 +34,13 @@ export const App = () => (
       <Toaster position="top-center" richColors />
       <BrowserRouter>
         <AuthProvider>
+          <LanguageProvider>
           <CareEventsProvider>
             <NotificationBootstrap />
             <MedicationAlertRouteGuard />
             <AppRoutes />
           </CareEventsProvider>
+          </LanguageProvider>
         </AuthProvider>
       </BrowserRouter>
     </NutritionCartProvider>

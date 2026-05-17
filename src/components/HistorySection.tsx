@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Pin, RotateCcw, ChevronDown, ChevronUp, CalendarHeart, MapPin, History } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString, addDaysMYT } from "@/lib/eventRecurrence";
+import { getIntlLocale } from "@/lib/dateLocale";
 
 interface HistorySectionProps {
   events: CareEvent[];
@@ -12,9 +14,17 @@ interface HistorySectionProps {
 
 type TimeGroup = "Today" | "Yesterday" | "Last 7 Days" | "Last 30 Days" | "Older";
 
+const GROUP_LABEL_KEY: Record<TimeGroup, string> = {
+  Today: "historySection.groupToday",
+  Yesterday: "historySection.groupYesterday",
+  "Last 7 Days": "historySection.groupLast7",
+  "Last 30 Days": "historySection.groupLast30",
+  Older: "historySection.groupOlder",
+};
+
 function getTimeGroup(startDatetime: string | undefined): TimeGroup {
   if (!startDatetime) return "Older";
-  const eventDate = startDatetime.slice(0, 10); // "YYYY-MM-DD"
+  const eventDate = startDatetime.slice(0, 10);
   const today = getMYTDateString();
   const yesterday = addDaysMYT(-1);
   const sevenDaysAgo = addDaysMYT(-7);
@@ -30,7 +40,7 @@ function getTimeGroup(startDatetime: string | undefined): TimeGroup {
 function formatEventDate(startDatetime: string | undefined): string {
   if (!startDatetime) return "";
   const date = new Date(startDatetime);
-  return date.toLocaleDateString("en-AU", {
+  return date.toLocaleDateString(getIntlLocale(), {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -41,7 +51,7 @@ function formatEventDate(startDatetime: string | undefined): string {
 function formatEventTime(startDatetime: string | undefined): string {
   if (!startDatetime) return "";
   const date = new Date(startDatetime);
-  return date.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return date.toLocaleTimeString(getIntlLocale(), { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
 interface HistoryItemProps {
@@ -51,6 +61,7 @@ interface HistoryItemProps {
 }
 
 function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
+  const { t } = useTranslation();
   const isPinned = event.isPinned === 1;
   const isOutdoor = event.eventType === "outdoor";
 
@@ -68,7 +79,6 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
       className="group flex items-start gap-3 p-4 bg-white border border-[#E0E5F2] rounded-2xl hover:border-[#4318FF]/20 hover:shadow-[0_6px_20px_rgba(112,144,176,0.1)] transition-all cursor-pointer"
       onClick={() => onReuse(event)}
     >
-      {/* Icon */}
       <div
         className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
           isOutdoor ? "bg-emerald-50" : "bg-orange-50"
@@ -81,7 +91,6 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
         )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -94,7 +103,7 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
                     : "bg-orange-50 text-orange-600"
                 }`}
               >
-                {isOutdoor ? "Outdoor" : "Home Care"}
+                {isOutdoor ? t("historySection.outdoor") : t("historySection.homeCare")}
               </span>
               {event.type && event.type !== "Home Care" && event.type !== "Outdoor" && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#F4F7FE] text-[#A3AED0]">
@@ -104,13 +113,11 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-            {/* Pin button */}
             <button
               type="button"
               onClick={handlePin}
-              title={isPinned ? "Unpin" : "Pin to top"}
+              title={isPinned ? t("historySection.unpin") : t("historySection.pin")}
               className={`p-1.5 rounded-lg transition-all ${
                 isPinned
                   ? "text-[#4318FF] bg-[#E9E3FF]"
@@ -120,11 +127,10 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
               <Pin className={`w-3.5 h-3.5 ${isPinned ? "fill-[#4318FF]" : ""}`} />
             </button>
 
-            {/* Reuse button */}
             <button
               type="button"
               onClick={() => onReuse(event)}
-              title="Use again"
+              title={t("historySection.useAgain")}
               className="p-1.5 text-[#A3AED0] hover:text-[#4318FF] hover:bg-[#F4F7FE] rounded-lg transition-all opacity-0 group-hover:opacity-100"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -132,12 +138,10 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
           </div>
         </div>
 
-        {/* Date + time */}
         <p className="text-[10px] text-[#A3AED0] mt-1.5">
           {formatEventDate(event.startDatetime)} · {formatEventTime(event.startDatetime)}
         </p>
 
-        {/* Note preview */}
         {event.note && (
           <p className="text-[11px] text-[#A3AED0] mt-1 line-clamp-1 italic">"{event.note}"</p>
         )}
@@ -149,12 +153,12 @@ function HistoryItem({ event, onTogglePin, onReuse }: HistoryItemProps) {
 const GROUP_ORDER: TimeGroup[] = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days"];
 
 export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionProps) {
+  const { t } = useTranslation();
   const [olderExpanded, setOlderExpanded] = useState(false);
 
   const pinnedItems = events.filter((e) => e.isPinned === 1);
   const recentItems = events.filter((e) => e.isPinned !== 1);
 
-  // Group recent items by time range
   const grouped: Record<TimeGroup, CareEvent[]> = {
     Today: [],
     Yesterday: [],
@@ -167,7 +171,6 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
     grouped[getTimeGroup(event.startDatetime)].push(event);
   }
 
-  // Sort each group newest-first
   for (const group of Object.values(grouped)) {
     group.sort((a, b) => {
       const aDate = a.startDatetime ?? "";
@@ -181,31 +184,29 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
 
   return (
     <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)]">
-      {/* Section header */}
       <h2 className="text-xl font-bold text-[#2B3674] mb-6 flex items-center gap-2">
         <History className="w-5 h-5 text-[#4318FF]" />
-        History
+        {t("historySection.title")}
         <span className="ml-auto text-xs font-bold px-3 py-1 bg-[#E9E3FF] text-[#4318FF] rounded-full">
-          {events.length} record{events.length !== 1 ? "s" : ""}
+          {t("historySection.recordCount", { count: events.length })}
         </span>
       </h2>
 
       {!hasAnyHistory ? (
         <div className="p-8 text-center bg-[#F4F7FE] rounded-2xl">
           <History className="w-8 h-8 text-[#A3AED0] mx-auto mb-3" />
-          <p className="text-sm font-bold text-[#A3AED0]">No history records yet.</p>
-          <p className="text-xs text-[#A3AED0] mt-1">Your recent care and outdoor events will appear here for quick reuse.</p>
+          <p className="text-sm font-bold text-[#A3AED0]">{t("historySection.emptyTitle")}</p>
+          <p className="text-xs text-[#A3AED0] mt-1">{t("historySection.emptySubtitle")}</p>
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Pinned History */}
           <div>
             <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3 flex items-center gap-1.5">
-              <Pin className="w-3 h-3" /> Pinned
+              <Pin className="w-3 h-3" /> {t("historySection.pinned")}
             </p>
             {pinnedItems.length === 0 ? (
               <p className="text-xs text-[#A3AED0] italic px-1">
-                No pinned history yet. Pin frequently used records for faster access.
+                {t("historySection.noPinned")}
               </p>
             ) : (
               <div className="space-y-2">
@@ -223,18 +224,16 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
             )}
           </div>
 
-          {/* Divider */}
           {recentItems.length > 0 && (
             <div className="border-t border-[#F4F7FE]" />
           )}
 
-          {/* Recent History Groups */}
           {GROUP_ORDER.map((group) => {
             const items = grouped[group];
             if (items.length === 0) return null;
             return (
               <div key={group}>
-                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3">{group}</p>
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-3">{t(GROUP_LABEL_KEY[group])}</p>
                 <div className="space-y-2">
                   <AnimatePresence>
                     {items.map((event) => (
@@ -251,7 +250,6 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
             );
           })}
 
-          {/* Older than 30 Days, collapsed by default */}
           {hasOlder && (
             <div>
               <button
@@ -264,9 +262,9 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
                 ) : (
                   <ChevronDown className="w-3.5 h-3.5" />
                 )}
-                Older than 30 Days
+                {t("historySection.groupOlder")}
                 <span className="ml-auto font-bold text-[#A3AED0] normal-case tracking-normal">
-                  {grouped["Older"].length} record{grouped["Older"].length !== 1 ? "s" : ""}
+                  {t("historySection.recordCount", { count: grouped["Older"].length })}
                 </span>
               </button>
 
@@ -296,10 +294,9 @@ export function HistorySection({ events, onTogglePin, onReuse }: HistorySectionP
         </div>
       )}
 
-      {/* Use Again hint */}
       {hasAnyHistory && (
         <p className="text-[10px] text-[#A3AED0] mt-6 text-center">
-          Click any record to prefill the form · Pin to keep at the top
+          {t("historySection.footerHint")}
         </p>
       )}
     </div>

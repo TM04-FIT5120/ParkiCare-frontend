@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
 import { User, Lock, ArrowRight, ShieldCheck, Info } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Footer } from "@/components/layout/Footer";
 import { authService } from "@/services/auth";
 import { useAuth } from "@/context/AuthContext";
@@ -10,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 export function RegisterPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     nickname: "",
     password: "",
@@ -36,23 +38,23 @@ export function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nickname || !formData.password || !formData.confirmPassword) {
-      toast.error("Please fill in all fields");
+      toast.error(t("register.errorFillAll"));
       return;
     }
     if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
+      toast.error(t("register.errorPasswordMatch"));
       return;
     }
     if (formData.password.length < 6) {
-      toast.error("Password must be at least 6 characters long");
+      toast.error(t("register.errorPasswordMin"));
       return;
     }
     if (formData.password.length > 20) {
-      toast.error("Password must be less than 20 characters long");
+      toast.error(t("register.errorPasswordMax"));
       return;
     }
     if (!/^[a-zA-Z0-9]{6,20}$/.test(formData.nickname)) {
-      toast.error("Nickname must be 6–20 alphanumeric characters");
+      toast.error(t("register.errorNickname"));
       return;
     }
 
@@ -60,7 +62,7 @@ export function RegisterPage() {
     try {
       const data = await authService.register(formData.nickname, formData.password);
       login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname });
-      toast.success("Account created successfully!");
+      toast.success(t("register.successCreated"));
       navigate("/patient-setup", { state: { caregiverId: data.caregiverId } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Registration failed");
@@ -83,7 +85,7 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans overflow-hidden relative">
+    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans relative pt-safe pb-safe">
       <div 
         className="flex-1 w-full flex relative flex-row-reverse"
         onMouseMove={handleMouseMove}
@@ -122,13 +124,13 @@ export function RegisterPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
               <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-              <span className="text-xs font-medium tracking-wide">Join Our Community</span>
+              <span className="text-xs font-medium tracking-wide">{t("register.joinCommunity")}</span>
             </div>
             <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200">
-              Your partner in navigating daily care.
+              {t("register.tagline")}
             </h1>
             <p className="text-lg text-slate-300 font-light max-w-md">
-              Create an account to track medications, log daily vitals, and share real-time updates with your healthcare team.
+              {t("register.description")}
             </p>
           </motion.div>
         </div>
@@ -157,8 +159,8 @@ export function RegisterPage() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
               
               <motion.div variants={itemVariants} className="mb-2 relative z-10">
-                <h3 className="text-3xl font-bold mb-2 text-slate-900">Create an account</h3>
-                <p className="text-slate-600 text-sm font-medium">Join ParkiCare to manage and coordinate care.</p>
+                <h3 className="text-3xl font-bold mb-2 text-slate-900">{t("register.title")}</h3>
+                <p className="text-slate-600 text-sm font-medium">{t("register.subtitle")}</p>
               </motion.div>
 
               <motion.div variants={itemVariants} className="space-y-4 pt-4 relative z-10">
@@ -172,7 +174,7 @@ export function RegisterPage() {
                     value={formData.nickname}
                     onChange={handleChange}
                     className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/10 focus:border-indigo-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
-                    placeholder="User Nickname (Caregiver)"
+                    placeholder={t("register.nicknamePlaceholder")}
                     required
                   />
                 </div>
@@ -180,7 +182,7 @@ export function RegisterPage() {
                 <div className="flex items-start gap-2 px-1 pb-1">
                   <Info className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    For privacy reasons, please use a nickname instead of your real name.
+                    {t("register.privacyNote")}
                   </p>
                 </div>
 
@@ -194,7 +196,7 @@ export function RegisterPage() {
                     value={formData.password}
                     onChange={handleChange}
                     className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/10 focus:border-indigo-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
-                    placeholder="Password"
+                    placeholder={t("register.passwordPlaceholder")}
                     required
                   />
                 </div>
@@ -202,7 +204,7 @@ export function RegisterPage() {
                 <div className="flex items-start gap-2 px-1 pb-1">
                   <Info className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    Password must be 6–20 characters long.
+                    {t("register.passwordHint")}
                   </p>
                 </div>
 
@@ -216,7 +218,7 @@ export function RegisterPage() {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     className="w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/10 focus:border-indigo-500 transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
-                    placeholder="Confirm Password"
+                    placeholder={t("register.confirmPasswordPlaceholder")}
                     required
                   />
                 </div>
@@ -232,7 +234,7 @@ export function RegisterPage() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-800 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10">
-                    {isLoading ? "Creating account..." : "Sign Up"}
+                    {isLoading ? t("register.creatingAccount") : t("register.signUp")}
                   </span>
                   {!isLoading && (
                     <ArrowRight className="w-5 h-5 relative z-10 group-hover/btn:translate-x-1 transition-transform" />
@@ -242,9 +244,9 @@ export function RegisterPage() {
 
               <motion.div variants={itemVariants} className="text-center mt-6 pt-6 border-t border-slate-200/50 relative z-10">
                 <p className="text-sm font-medium text-slate-600">
-                  Already have an account?{" "}
+                  {t("register.alreadyHaveAccount")}{" "}
                   <Link to="/login" className="text-indigo-600 font-bold hover:text-indigo-700 hover:underline underline-offset-4">
-                    Sign in
+                    {t("register.signIn")}
                   </Link>
                 </p>
               </motion.div>

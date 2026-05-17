@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { LayoutDashboard, Bell, Pill, Heart, MapPin, BookOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface GuideStep {
   text: string;
@@ -21,146 +22,122 @@ interface GuideFeature {
   images?: { src: string; alt: string }[];
 }
 
-const guideFeatures: GuideFeature[] = [
-  {
-    id: 1,
-    title: "Using the Home Dashboard",
-    subtitle: "Add items and see today’s priorities",
-    icon: <LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/home",
-    accentColor: "bg-blue-50",
-    iconColor: "text-blue-500",
-    images: [{ src: "/Guide/Picture1.png", alt: "Home dashboard - add medications, care tasks, and plans" }],
-    steps: [
-      {
-        text: "Go to the Home page. Use the dashboard sections to add more medications, daily care tasks, or upcoming plans when needed.",
-      },
-      {
-        text: "Use this page to quickly see important medication times, care tasks, and scheduled events for today.",
-      },
-      {
-        text: "Check today’s priorities",
-        note: "Use this page to quickly identify important medication times, care tasks, and scheduled events",
-        image: {
-          src: "/Guide/Picture2.png",
-          alt: "Calendar view - use Week or Month and the Today control to see medications, care tasks, and scheduled events",
-        },
-      },
-    ],
-  },
-  {
-    id: 2,
-    title: "Setting Medication Reminders",
-    subtitle: "Scan, review, save, and respond to reminders",
-    icon: <Pill className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/care-events",
-    accentColor: "bg-purple-50",
-    iconColor: "text-purple-500",
-    images: [{ src: "/Guide/Picture3.png", alt: "Care Events - add home care tasks and review activities" }],
-    steps: [
-      { text: "Open Care Events and use Add Medication on the left. The form is a short wizard (photo → name → dosage → dates & repeat → how often & meal timing → dose times → review)." },
-      {
-        text: "Optional photo of the label - ParkiCare shows a short OCR-style processing screen, then displays a suggestion panel only; it does not auto-fill the form fields.",
-      },
-      { text: "Enter the drug (search the list or type the name), then dosage (oral strength/quantity or another route), start/end dates, repeat, frequency, when to take (with meals), and administration times." },
-      {
-        text: "On the Review step, check everything and tap Confirm & Save to add it to your Medication List and schedule.",
-      },
-      { text: "When a reminder appears, use Confirm Administration or Snooze 5 min as needed." },
-    ],
-  },
-  {
-    id: 3,
-    title: "Managing Care Events",
-    subtitle: "Daily care tasks and upcoming activities",
-    icon: <Heart className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/care-events",
-    accentColor: "bg-rose-50",
-    iconColor: "text-rose-500",
-    images: [{ src: "/Guide/Picture4.png", alt: "Care Events - Add Outdoor Event" }],
-    steps: [
-      { text: "Go to Care Events and open the Add Care Event section to manage daily caregiving activities." },
-      {
-        text: "Add tasks or events such as bathing, nursing care, appointments, or household-related responsibilities.",
-      },
-      { text: "Use this area to keep track of important plans and daily care responsibilities." },
-    ],
-  },
-  {
-    id: 4,
-    title: "Add Outdoor Event",
-    subtitle: "Plan outings and see them on your schedule",
-    icon: <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/care-events",
-    accentColor: "bg-emerald-50",
-    iconColor: "text-emerald-500",
-    images: [{ src: "/Guide/Picture5.png", alt: "Outdoor event saved on the care schedule" }],
-    steps: [
-      { text: "From the navigation menu, open the Care Events page." },
-      { text: "Select Add Outdoor Event to create a new outdoor event." },
-      { text: "Enter the event title, category or type, and event time." },
-      { text: "Tap Save Outdoor Event to add it to your care schedule." },
-      { text: "The event appears in your care planning section for easier daily management." },
-    ],
-  },
-  {
-    id: 5,
-    title: "Notifications",
-    subtitle: "Allow alerts for medication reminders",
-    icon: <Bell className="w-5 h-5 sm:w-6 sm:h-6" />,
-    accentColor: "bg-violet-50",
-    iconColor: "text-violet-500",
-    images: [{ src: "/Guide/Picture6.png", alt: "Browser notification permission for ParkiCare" }],
-    steps: [
-      {
-        text: "After you log in, your browser may ask to allow notifications for ParkiCare. Choose Allow so medication reminders can reach you on time.",
-      },
-      {
-        text: "If you dismissed the prompt or chose Block, open the site settings for ParkiCare in your browser and set Notifications to Allow.",
-      },
-      {
-        text: "When a medication reminder fires, you may get a system notification and an in-app prompt to Confirm Administration or Snooze.",
-      },
-      {
-        text: "Push works well on Android and on desktop browsers such as Chrome, Edge, and Firefox.",
-        note: "On iPhone or iPad, add ParkiCare to the Home Screen and use a recent iOS version; enable notifications in system settings if prompted.",
-      },
-    ],
-  },
-  {
-    id: 6,
-    title: "Knowledge Hub",
-    subtitle: "Learn more about Parkinson’s care (optional)",
-    icon: <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />,
-    route: "/knowledge-hub",
-    accentColor: "bg-sky-50",
-    iconColor: "text-sky-500",
-    steps: [
-      { text: "Open Knowledge Hub from the top navigation." },
-      { text: "Watch the introductory video and read the topic cards for fundamentals of Parkinson’s care." },
-      { text: "Use the references section for links to deeper reading." },
-    ],
-  },
-];
-
 export function GuidePage() {
+  const { t } = useTranslation();
+
+  const guideFeatures: GuideFeature[] = [
+    {
+      id: 1,
+      title: t("guide.feat1Title"),
+      subtitle: t("guide.feat1Subtitle"),
+      icon: <LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />,
+      route: "/home",
+      accentColor: "bg-blue-50",
+      iconColor: "text-blue-500",
+      images: [{ src: "/Guide/Picture1.png", alt: t("guide.feat1Img1Alt") }],
+      steps: [
+        { text: t("guide.feat1Step1") },
+        { text: t("guide.feat1Step2") },
+        { text: t("guide.feat1Step3"), note: t("guide.feat1Step3Note"), image: { src: "/Guide/Picture2.png", alt: t("guide.feat1Img2Alt") } },
+      ],
+    },
+    {
+      id: 2,
+      title: t("guide.feat2Title"),
+      subtitle: t("guide.feat2Subtitle"),
+      icon: <Pill className="w-5 h-5 sm:w-6 sm:h-6" />,
+      route: "/care-events",
+      accentColor: "bg-purple-50",
+      iconColor: "text-purple-500",
+      images: [{ src: "/Guide/Picture3.png", alt: t("guide.feat2Img1Alt") }],
+      steps: [
+        { text: t("guide.feat2Step1") },
+        { text: t("guide.feat2Step2") },
+        { text: t("guide.feat2Step3") },
+        { text: t("guide.feat2Step4") },
+        { text: t("guide.feat2Step5") },
+      ],
+    },
+    {
+      id: 3,
+      title: t("guide.feat3Title"),
+      subtitle: t("guide.feat3Subtitle"),
+      icon: <Heart className="w-5 h-5 sm:w-6 sm:h-6" />,
+      route: "/care-events",
+      accentColor: "bg-rose-50",
+      iconColor: "text-rose-500",
+      images: [{ src: "/Guide/Picture4.png", alt: t("guide.feat3Img1Alt") }],
+      steps: [
+        { text: t("guide.feat3Step1") },
+        { text: t("guide.feat3Step2") },
+        { text: t("guide.feat3Step3") },
+      ],
+    },
+    {
+      id: 4,
+      title: t("guide.feat4Title"),
+      subtitle: t("guide.feat4Subtitle"),
+      icon: <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />,
+      route: "/care-events",
+      accentColor: "bg-emerald-50",
+      iconColor: "text-emerald-500",
+      images: [{ src: "/Guide/Picture5.png", alt: t("guide.feat4Img1Alt") }],
+      steps: [
+        { text: t("guide.feat4Step1") },
+        { text: t("guide.feat4Step2") },
+        { text: t("guide.feat4Step3") },
+        { text: t("guide.feat4Step4") },
+        { text: t("guide.feat4Step5") },
+      ],
+    },
+    {
+      id: 5,
+      title: t("guide.feat5Title"),
+      subtitle: t("guide.feat5Subtitle"),
+      icon: <Bell className="w-5 h-5 sm:w-6 sm:h-6" />,
+      accentColor: "bg-violet-50",
+      iconColor: "text-violet-500",
+      images: [{ src: "/Guide/Picture6.png", alt: t("guide.feat5Img1Alt") }],
+      steps: [
+        { text: t("guide.feat5Step1") },
+        { text: t("guide.feat5Step2") },
+        { text: t("guide.feat5Step3") },
+        { text: t("guide.feat5Step4"), note: t("guide.feat5Step4Note") },
+      ],
+    },
+    {
+      id: 6,
+      title: t("guide.feat6Title"),
+      subtitle: t("guide.feat6Subtitle"),
+      icon: <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />,
+      route: "/knowledge-hub",
+      accentColor: "bg-sky-50",
+      iconColor: "text-sky-500",
+      steps: [
+        { text: t("guide.feat6Step1") },
+        { text: t("guide.feat6Step2") },
+        { text: t("guide.feat6Step3") },
+      ],
+    },
+  ];
+
   return (
     <div className="pb-6 sm:pb-8">
       <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div className="max-w-4xl mx-auto py-4 sm:py-6">
           <div className="max-w-4xl mx-auto flex items-center gap-3 sm:gap-4">
             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
               <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#2B3674]">How to Use ParkiCare</h1>
-              <p className="text-sm sm:text-base text-[#A3AED0]">Step-by-step guide for caregivers</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#2B3674]">{t("guide.title")}</h1>
+              <p className="text-sm sm:text-base text-[#A3AED0]">{t("guide.subtitle")}</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+      <div className="max-w-4xl xl:max-w-5xl mx-auto pt-6 sm:pt-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -169,8 +146,7 @@ export function GuidePage() {
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 mb-6 flex items-start gap-3">
             <Bell className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <p className="text-sm sm:text-base text-amber-800 leading-relaxed">
-              <span className="font-semibold">To receive medication alerts on iPhone, iPad, or Android:</span> add ParkiCare to your Home Screen.{" "}
-              Tap <span className="font-semibold">Share</span> &rarr; <span className="font-semibold">Add to Home Screen</span>, then open the app from there and allow notifications when prompted.
+              <span className="font-semibold">{t("guide.notificationAlertPrefix")}</span> {t("guide.notificationAlertBody")}
             </p>
           </div>
 
@@ -256,9 +232,9 @@ export function GuidePage() {
           ))}
 
           <div className="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-xl">
-            <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">You&apos;re all set!</h3>
+            <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">{t("guide.allSet")}</h3>
             <p className="text-sm sm:text-base text-indigo-100">
-              Use the navigation links at the top to open Home, Care Events, or the Knowledge Hub anytime.
+              {t("guide.allSetDesc")}
             </p>
           </div>
         </motion.div>

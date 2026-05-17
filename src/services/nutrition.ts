@@ -3,6 +3,8 @@ import api from "@/lib/api";
 export interface FoodNutrition {
   id: number;
   foodName: string;
+  /** English name for API / recipe generation when foodName is localized */
+  canonicalFoodName?: string;
   category: string;
   safetyStatus: "Safe" | "Recommended" | "Avoid" | "Caution";
   measure: string;

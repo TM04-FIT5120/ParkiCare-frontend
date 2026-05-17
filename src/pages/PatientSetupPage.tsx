@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
 import { User, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import * as Select from "@radix-ui/react-select";
 import { Footer } from "@/components/layout/Footer";
 import { patientService } from "@/services/patient";
@@ -14,7 +15,8 @@ export function PatientSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, setPatient } = useAuth();
-  const generatedId = user?.caregiverId ?? location.state?.caregiverId ?? Math.floor(100000 + Math.random() * 900000);
+  const { t } = useTranslation();
+  const caregiverId = user?.caregiverId ?? location.state?.caregiverId;
 
   const [patientNickname, setPatientNickname] = useState("");
   const [ageRange, setAgeRange] = useState("");
@@ -34,20 +36,25 @@ export function PatientSetupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientNickname || !ageRange) {
-      toast.error("Please fill in all fields");
+      toast.error(t("patientSetup.errorFillAll"));
+      return;
+    }
+    if (!caregiverId) {
+      toast.error(t("patientSetup.errorNoCaregiver"));
+      navigate("/login");
       return;
     }
 
     setIsLoading(true);
     try {
       const data = await patientService.createPatient(
-        Number(generatedId),
+        Number(caregiverId),
         patientNickname,
         ageRange,
       );
       setPatient({ patientId: data.id, patientNickname: data.patientNickname, patientAge: data.ageRange });
-      toast.success("Setup complete!");
-      navigate("/profile", { state: { caregiverId: generatedId, patientNickname, ageRange } });
+      toast.success(t("patientSetup.successSetup"));
+      navigate("/profile", { state: { caregiverId, patientNickname, ageRange } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Patient setup failed");
     } finally {
@@ -69,7 +76,7 @@ export function PatientSetupPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans overflow-hidden relative">
+    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans relative pt-safe pb-safe">
       <div 
         className="flex-1 w-full flex relative"
         onMouseMove={handleMouseMove}
@@ -98,15 +105,15 @@ export function PatientSetupPage() {
             className="space-y-6 bg-white/70 backdrop-blur-2xl p-8 rounded-[2rem] shadow-[0_8px_40px_rgb(0,0,0,0.06)] border border-white/50"
           >
             <motion.div variants={itemVariants} className="mb-2">
-              <h3 className="text-3xl font-bold mb-2 text-slate-900">Patient Details</h3>
+              <h3 className="text-3xl font-bold mb-2 text-slate-900">{t("patientSetup.title")}</h3>
               <p className="text-slate-500 text-sm">
-                Set up your patient's profile. No real names or exact birth dates required.
+                {t("patientSetup.subtitle")}
               </p>
             </motion.div>
 
             <motion.div variants={itemVariants} className="space-y-5 pt-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1">Patient Nickname</label>
+                <label className="text-sm font-semibold text-slate-700 ml-1">{t("patientSetup.patientNicknameLabel")}</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <User className="w-5 h-5 text-blue-400 group-focus-within:text-blue-500 transition-colors" />
@@ -116,18 +123,18 @@ export function PatientSetupPage() {
                     value={patientNickname}
                     onChange={(e) => setPatientNickname(e.target.value)}
                     className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 transition-all placeholder:text-slate-400 text-sm font-medium shadow-sm"
-                    placeholder="e.g., Dear Parent"
+                    placeholder={t("patientSetup.patientNicknamePlaceholder")}
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1">Approximate Age Range</label>
+                <label className="text-sm font-semibold text-slate-700 ml-1">{t("patientSetup.ageRangeLabel")}</label>
                 
                 <Select.Root value={ageRange} onValueChange={setAgeRange} required>
                   <Select.Trigger className="w-full flex items-center justify-between px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 transition-all text-sm font-medium shadow-sm data-[placeholder]:text-slate-400">
-                    <Select.Value placeholder="Select Age Range" />
+                    <Select.Value placeholder={t("patientSetup.ageRangePlaceholder")} />
                     <Select.Icon>
                       <ChevronDown className="w-5 h-5 text-slate-400" />
                     </Select.Icon>
@@ -146,7 +153,7 @@ export function PatientSetupPage() {
                             value={range}
                             className="relative flex items-center px-8 py-3 text-sm font-medium text-slate-700 rounded-xl cursor-pointer select-none outline-none data-[highlighted]:bg-blue-50 data-[highlighted]:text-blue-700 transition-colors"
                           >
-                            <Select.ItemText>{range} years</Select.ItemText>
+                            <Select.ItemText>{range} {t("patientSetup.ageYearsSuffix")}</Select.ItemText>
                             <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
                               <span className="w-2 h-2 bg-blue-600 rounded-full" />
                             </Select.ItemIndicator>
@@ -169,7 +176,7 @@ export function PatientSetupPage() {
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-800 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <span className="relative z-10">
-                  {isLoading ? "Saving..." : "Complete Setup"}
+                  {isLoading ? t("patientSetup.saving") : t("patientSetup.completeSetup")}
                 </span>
                 {!isLoading && (
                   <ArrowRight className="w-5 h-5 relative z-10 group-hover:translate-x-1 transition-transform" />
@@ -202,13 +209,13 @@ export function PatientSetupPage() {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6 shadow-xl">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-xs font-medium tracking-wide">ParkiCare Platform</span>
+            <span className="text-xs font-medium tracking-wide">{t("patientSetup.platform")}</span>
           </div>
           <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
-            Privacy-First Care.
+            {t("patientSetup.tagline")}
           </h1>
           <p className="text-lg text-slate-300 font-light max-w-md">
-            We value your privacy. Set up your loved one's profile using nicknames and age ranges to ensure complete anonymity while receiving the best care support.
+            {t("patientSetup.description")}
           </p>
         </motion.div>
       </div>

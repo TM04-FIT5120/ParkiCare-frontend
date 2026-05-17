@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
 import { User, Lock, ArrowRight, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Footer } from "@/components/layout/Footer";
 import { authService } from "@/services/auth";
 import { patientService } from "@/services/patient";
@@ -11,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, setPatient } = useAuth();
+  const { t } = useTranslation();
   const [userId, setUserId] = useState(() => localStorage.getItem("parkicare_remembered_id") ?? "");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem("parkicare_remembered_id"));
@@ -41,23 +43,23 @@ export function LoginPage() {
     e.preventDefault();
     setError(null);
     if (!userId || !password) {
-      setError("Please fill in all fields.");
+      setError(t("login.errorFillAll"));
       return;
     }
 
     setIsLoading(true);
     try {
       const data = await authService.login(userId, password);
-      login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname });
+      login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname, language: data.language });
 
       const patients = await patientService.getPatientsByCaregiver(data.caregiverId);
       if (patients.length > 0) {
         const p = patients[0];
         setPatient({ patientId: p.id, patientNickname: p.patientNickname, patientAge: p.ageRange });
-        toast.success("Welcome back to ParkiCare!");
+        toast.success(t("login.welcomeToast"));
         navigate("/home");
       } else {
-        toast.success("Welcome! Let's set up your patient profile.");
+        toast.success(t("login.welcomeNewToast"));
         navigate("/patient-setup");
       }
     } catch (err) {
@@ -72,8 +74,8 @@ export function LoginPage() {
         message.toLowerCase().includes("wrong");
       setError(
         isCredentialError
-          ? "Incorrect User ID or password. Please try again."
-          : "Something went wrong. Please try again later."
+          ? t("login.errorCredentials")
+          : t("login.errorGeneral")
       );
     } finally {
       setIsLoading(false);
@@ -94,7 +96,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans overflow-hidden relative">
+    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans relative pt-safe pb-safe">
       <div 
         className="flex-1 w-full flex relative"
         onMouseMove={handleMouseMove}
@@ -133,13 +135,13 @@ export function LoginPage() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
               <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span className="text-xs font-medium tracking-wide">ParkiCare Platform</span>
+              <span className="text-xs font-medium tracking-wide">{t("login.platform")}</span>
             </div>
             <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
-              Empowering better care for our loved ones.
+              {t("login.tagline")}
             </h1>
             <p className="text-lg text-slate-300 font-light max-w-md">
-              Log in with your unique User ID to securely manage patient records, track vitals, and coordinate schedules.
+              {t("login.description")}
             </p>
           </motion.div>
         </div>
@@ -168,8 +170,8 @@ export function LoginPage() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
               
               <motion.div variants={itemVariants} className="relative z-10">
-                <h3 className="text-3xl font-bold mb-2 text-slate-900">Welcome back</h3>
-                <p className="text-slate-600 text-sm font-medium">Please enter your User ID and password to sign in.</p>
+                <h3 className="text-3xl font-bold mb-2 text-slate-900">{t("login.title")}</h3>
+                <p className="text-slate-600 text-sm font-medium">{t("login.subtitle")}</p>
               </motion.div>
 
               <motion.div variants={itemVariants} className="space-y-4 pt-4 relative z-10">
@@ -182,7 +184,7 @@ export function LoginPage() {
                     value={userId}
                     onChange={(e) => { setUserId(e.target.value); setError(null); }}
                     className={`w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border rounded-2xl text-slate-900 outline-none transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] ${error ? "border-red-400 focus:ring-4 focus:ring-red-500/10 focus:border-red-500" : "border-white/60 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500"}`}
-                    placeholder="User ID (e.g., 100456)"
+                    placeholder={t("login.userIdPlaceholder")}
                     required
                   />
                 </div>
@@ -196,7 +198,7 @@ export function LoginPage() {
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
                     className={`w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border rounded-2xl text-slate-900 outline-none transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] ${error ? "border-red-400 focus:ring-4 focus:ring-red-500/10 focus:border-red-500" : "border-white/60 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500"}`}
-                    placeholder="Password"
+                    placeholder={t("login.passwordPlaceholder")}
                     required
                   />
                 </div>
@@ -228,7 +230,7 @@ export function LoginPage() {
                       </motion.div>
                     )}
                   </div>
-                  <span className="text-sm font-medium text-slate-700 select-none">Remember ID</span>
+                  <span className="text-sm font-medium text-slate-700 select-none">{t("login.rememberMe")}</span>
                 </label>
 
               </motion.div>
@@ -243,7 +245,7 @@ export function LoginPage() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-800 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10">
-                    {isLoading ? "Signing in..." : "Sign In"}
+                    {isLoading ? t("login.signingIn") : t("login.signIn")}
                   </span>
                   {!isLoading && (
                     <ArrowRight className="w-5 h-5 relative z-10 group-hover/btn:translate-x-1 transition-transform" />
@@ -252,9 +254,9 @@ export function LoginPage() {
               </motion.div>
 
               <motion.p variants={itemVariants} className="text-center text-sm font-medium text-slate-600 mt-8 relative z-10 border-t border-slate-200/50 pt-6">
-                Don't have an account?{" "}
+                {t("login.noAccount")}{" "}
                 <Link to="/register" className="text-blue-600 font-bold hover:text-blue-700 hover:underline underline-offset-4">
-                  Sign up
+                  {t("login.signUp")}
                 </Link>
               </motion.p>
             </motion.form>

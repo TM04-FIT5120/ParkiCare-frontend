@@ -4,6 +4,8 @@ import { ChefHat, Loader2, AlertTriangle, ChevronDown, ChevronUp, UtensilsCrosse
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { recipeService, type GeneratedRecipe } from "@/services/recipe";
+import { useTranslation } from "react-i18next";
+import { getIntlLocale } from "@/lib/dateLocale";
 
 function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
@@ -17,7 +19,7 @@ function parseJsonArray(raw: string | null): string[] {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleString("en-AU", {
+    return new Date(dateStr).toLocaleString(getIntlLocale(), {
       day: "2-digit", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit",
     });
@@ -26,13 +28,13 @@ function formatDate(dateStr: string): string {
   }
 }
 
-type CategoryMeta = { label: string; colorClass: string; bgClass: string; icon: React.ComponentType<{ size?: number; className?: string }> };
+type CategoryMeta = { labelKey: string; colorClass: string; bgClass: string; icon: React.ComponentType<{ size?: number; className?: string }> };
 
 const CATEGORY_META: Record<string, CategoryMeta> = {
-  MAIN:    { label: "Main Dish", colorClass: "text-[#4318FF]", bgClass: "bg-[#EEF2FF]",    icon: Utensils },
-  SIDE:    { label: "Side",      colorClass: "text-emerald-700", bgClass: "bg-emerald-50", icon: Utensils },
-  DESSERT: { label: "Dessert",   colorClass: "text-pink-700",    bgClass: "bg-pink-50",    icon: Cookie   },
-  SNACK:   { label: "Snack",     colorClass: "text-amber-700",   bgClass: "bg-amber-50",   icon: Coffee   },
+  MAIN:    { labelKey: "recipes.mainDish", colorClass: "text-[#4318FF]",    bgClass: "bg-[#EEF2FF]",   icon: Utensils },
+  SIDE:    { labelKey: "recipes.side",     colorClass: "text-emerald-700",  bgClass: "bg-emerald-50",  icon: Utensils },
+  DESSERT: { labelKey: "recipes.dessert",  colorClass: "text-pink-700",     bgClass: "bg-pink-50",     icon: Cookie   },
+  SNACK:   { labelKey: "recipes.snack",    colorClass: "text-amber-700",    bgClass: "bg-amber-50",    icon: Coffee   },
 };
 
 function getCategoryMeta(category: string | null | undefined): CategoryMeta | null {
@@ -61,6 +63,7 @@ function HighProteinWarning({ warning, source }: { warning: string; source: stri
 }
 
 function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: boolean }) {
+  const { t } = useTranslation();
   const ingredients = parseJsonArray(recipe.ingredients);
   const steps = parseJsonArray(recipe.steps);
   const meta = getCategoryMeta(recipe.category);
@@ -78,7 +81,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
         <div className="flex items-center gap-2.5 min-w-0">
           <ChefHat size={18} className={isLatest ? "text-white shrink-0" : "text-[#4318FF] shrink-0"} />
           <h2 className={`font-extrabold break-words ${isLatest ? "text-base text-white" : "text-sm text-[#2B3674]"}`}>
-            {recipe.recipeTitle || "Untitled Recipe"}
+            {recipe.recipeTitle || t("recipes.untitledRecipe")}
           </h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -86,13 +89,13 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
             <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
               isLatest ? "bg-white/20 text-white" : `${meta.bgClass} ${meta.colorClass}`
             }`}>
-              {meta.label}
+              {t(meta.labelKey)}
             </span>
           )}
           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
             isLatest ? "bg-white/20 text-white" : "bg-[#EEF2FF] text-[#4318FF]"
           }`}>
-            {isLatest ? "Latest" : formatDate(recipe.createdAt)}
+            {isLatest ? t("recipes.latestBadge") : formatDate(recipe.createdAt)}
           </span>
         </div>
       </div>
@@ -106,7 +109,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
         {ingredients.length > 0 && (
           <div>
             <h3 className="text-[11px] font-extrabold text-[#A3AED0] uppercase tracking-widest mb-2.5">
-              Ingredients
+              {t("recipes.ingredients")}
             </h3>
             <ul className="flex flex-col gap-1.5">
               {ingredients.map((ing, i) => (
@@ -122,7 +125,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
         {steps.length > 0 && (
           <div>
             <h3 className="text-[11px] font-extrabold text-[#A3AED0] uppercase tracking-widest mb-2.5">
-              Preparation Steps
+              {t("recipes.preparationSteps")}
             </h3>
             <ol className="flex flex-col gap-2.5">
               {steps.map((step, i) => (
@@ -142,7 +145,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
             {recipe.suitableDesc && (
               <div className="bg-[#F0FDF4] rounded-xl px-3.5 py-3 border border-[#A7F3D0]">
                 <span className="text-[10px] font-extrabold text-[#059669] uppercase tracking-widest block mb-1">
-                  Why it's suitable
+                  {t("recipes.whySuitable")}
                 </span>
                 <p className="text-xs text-[#065F46] leading-relaxed">{recipe.suitableDesc}</p>
               </div>
@@ -150,7 +153,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
             {recipe.healthTip && (
               <div className="bg-[#EEF2FF] rounded-xl px-3.5 py-3 border border-[#C7D2FE]">
                 <span className="text-[10px] font-extrabold text-[#4318FF] uppercase tracking-widest block mb-1">
-                  Health Tip
+                  {t("recipes.healthTip")}
                 </span>
                 <p className="text-xs text-[#312E81] leading-relaxed">{recipe.healthTip}</p>
               </div>
@@ -160,11 +163,11 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
 
         {ingredients.length > 0 && (
           <p className="text-[11px] text-[#A3AED0] border-t border-[#F4F7FE] pt-3">
-            Made from: {ingredients.join(", ")}
+            {t("recipes.madeFrom")} {ingredients.join(", ")}
           </p>
         )}
         {isLatest && (
-          <p className="text-[10px] text-[#A3AED0]">Generated: {formatDate(recipe.createdAt)}</p>
+          <p className="text-[10px] text-[#A3AED0]">{t("recipes.generatedAt")}: {formatDate(recipe.createdAt)}</p>
         )}
       </div>
     </div>
@@ -172,6 +175,7 @@ function RecipeCard({ recipe, isLatest }: { recipe: GeneratedRecipe; isLatest: b
 }
 
 function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const meta = getCategoryMeta(recipe.category);
 
@@ -185,11 +189,11 @@ function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
         <div className="flex items-center gap-2.5 min-w-0">
           <ChefHat size={15} className="text-[#4318FF] shrink-0" />
           <span className="font-bold text-[13px] text-[#2B3674] break-words">
-            {recipe.recipeTitle || "Untitled Recipe"}
+            {recipe.recipeTitle || t("recipes.untitledRecipe")}
           </span>
           {meta && (
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${meta.bgClass} ${meta.colorClass}`}>
-              {meta.label}
+              {t(meta.labelKey)}
             </span>
           )}
         </div>
@@ -221,6 +225,7 @@ function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
 }
 
 export function RecipesPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
@@ -234,7 +239,7 @@ export function RecipesPage() {
     if (!user) return;
     recipeService.getRecipeHistory(user.caregiverId)
       .then(data => { setRecipes(data); setLoading(false); })
-      .catch(() => { setError("Failed to load recipes. Please try again."); setLoading(false); });
+      .catch(() => { setError(t("recipes.failedLoad")); setLoading(false); });
   }, [user]);
 
   // Group the most recent generation batch by createdAt minute (recipes generated
@@ -251,9 +256,9 @@ export function RecipesPage() {
     <div className="pb-20">
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#2B3674]">Recipe Generator</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#2B3674]">{t("recipes.pageTitle")}</h1>
         <p className="text-sm sm:text-base text-[#A3AED0] font-bold mt-1">
-          AI-generated, Parkinson-friendly recipes from your selected ingredients.
+          {t("recipes.pageSubtitle")}
         </p>
       </div>
 
@@ -271,26 +276,26 @@ export function RecipesPage() {
               setError(null);
               recipeService.getRecipeHistory(user!.caregiverId)
                 .then(d => { setRecipes(d); setLoading(false); })
-                .catch(() => { setError("Failed to load recipes."); setLoading(false); });
+                .catch(() => { setError(t("recipes.failedLoad")); setLoading(false); });
             }}
             className="px-4 py-2 bg-[#4318FF] text-white rounded-xl font-bold text-xs"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       ) : recipes.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
           <UtensilsCrossed size={56} className="text-[#E0E5F2]" />
-          <p className="font-bold text-[15px] text-[#2B3674]">No recipes generated yet</p>
+          <p className="font-bold text-[15px] text-[#2B3674]">{t("recipes.noRecipes")}</p>
           <p className="text-[13px] text-[#A3AED0] max-w-xs leading-relaxed">
-            Go to the Nutrition Library to build your basket and generate your first recipe.
+            {t("recipes.noRecipesDesc")}
           </p>
           <button
             type="button"
             onClick={() => navigate("/nutrition-library")}
             className="px-5 py-2.5 bg-gradient-to-r from-[#4318FF] to-[#6B35FF] text-white rounded-xl font-bold text-[13px]"
           >
-            Go to Nutrition Library
+            {t("recipes.goToNutritionLibrary")}
           </button>
         </div>
       ) : (
@@ -298,7 +303,7 @@ export function RecipesPage() {
           {/* ── Latest Generated Recipe(s) ─────────────────────────────────── */}
           <section>
             <p className="text-[11px] font-extrabold text-[#A3AED0] tracking-[.08em] uppercase mb-3">
-              Latest Generated Recipe
+              {t("recipes.latestSection")}
             </p>
 
             {hasBothColumns ? (
@@ -311,7 +316,7 @@ export function RecipesPage() {
                       <Utensils size={14} className="text-[#4318FF]" />
                     </div>
                     <span className="text-xs font-extrabold text-[#4318FF] uppercase tracking-widest">
-                      Main Dish
+                      {t("recipes.mainDish")}
                     </span>
                   </div>
                   {mainRecipes.map(r => (
@@ -333,7 +338,7 @@ export function RecipesPage() {
                       <Cookie size={14} className="text-emerald-700" />
                     </div>
                     <span className="text-xs font-extrabold text-emerald-700 uppercase tracking-widest">
-                      Sides
+                      {t("recipes.sides")}
                     </span>
                   </div>
                   {sideRecipes.map(r => (
@@ -369,7 +374,7 @@ export function RecipesPage() {
           {pastRecipes.length > 0 && (
             <section>
               <p className="text-[11px] font-extrabold text-[#A3AED0] tracking-[.08em] uppercase mb-3">
-                Past Recipes ({pastRecipes.length})
+                {t("recipes.pastRecipes", { count: pastRecipes.length })}
               </p>
               <div className="flex flex-col gap-2">
                 {(showAllPast ? pastRecipes : pastRecipes.slice(0, PAST_PREVIEW_COUNT)).map(r => (
@@ -386,12 +391,12 @@ export function RecipesPage() {
                   {showAllPast ? (
                     <>
                       <ChevronUp size={14} />
-                      Show Less
+                      {t("recipes.showLess")}
                     </>
                   ) : (
                     <>
                       <ChevronDown size={14} />
-                      Show {pastRecipes.length - PAST_PREVIEW_COUNT} More
+                      {t("recipes.showMore", { count: pastRecipes.length - PAST_PREVIEW_COUNT })}
                     </>
                   )}
                 </button>
