@@ -9,7 +9,10 @@ import { toast } from "sonner";
 import { nutritionService, FOOD_CATEGORIES, type FoodNutrition } from "@/services/nutrition";
 import { useNutritionCart } from "@/context/NutritionCartContext";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { recipeService } from "@/services/recipe";
+import { useTranslation } from "react-i18next";
+import { translateEnum } from "@/lib/translateEnum";
 
 // ─── Status color config (matches Claude Design) ─────────────────────────────
 
@@ -80,6 +83,7 @@ const STATUS_ICONS: Record<SafetyStatus, React.ReactNode> = {
 
 function StatusTag({ status, small }: { status: SafetyStatus; small?: boolean }) {
   const s = SC[status] ?? SC.Caution;
+  const label = translateEnum("safetyStatus", status);
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 4,
@@ -87,7 +91,7 @@ function StatusTag({ status, small }: { status: SafetyStatus; small?: boolean })
       borderRadius: 99, fontSize: 10, fontWeight: 700,
       background: s.bg, color: s.tx, border: `1px solid ${s.br}`, whiteSpace: "nowrap",
     }}>
-      {STATUS_ICONS[status]}{status}
+      {STATUS_ICONS[status]}{label}
     </span>
   );
 }
@@ -100,20 +104,49 @@ function categoryMatches(foodCategory: string, filterCategory: string): boolean 
 
 // ─── Remark parser ────────────────────────────────────────────────────────────
 
+const DEFAULT_REMARK_RATIONALE =
+  "Nutritional data is based on the USDA FoodData Central dataset.";
+const DEFAULT_CAREGIVER_TIP =
+  "Always consult the patient's neurologist or dietitian before making dietary changes.";
+
+/** Split food_nutrition.remark into sentence 1 (Parkinson's Connection) and sentence 2 (Caregiver Tip). */
+function splitRemarkSentences(remark: string): string[] {
+  const trimmed = remark.trim();
+  if (!trimmed) return [];
+
+  const byNewline = trimmed.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if (byNewline.length >= 2) return byNewline;
+
+  // Catalog copy often uses ". Caregivers should..." as the boundary between sections.
+  const caregiversBoundary = trimmed.search(/\.\s+Caregivers\b/i);
+  if (caregiversBoundary !== -1) {
+    const first = trimmed.slice(0, caregiversBoundary + 1).trim();
+    const second = trimmed.slice(caregiversBoundary + 1).trim();
+    if (first && second) return [first, second];
+  }
+
+  // English / Western punctuation, plus CJK sentence endings (zh/ms translations).
+  const byPunctuation = trimmed
+    .split(/(?<=[.!?])\s+|(?<=[。！？])\s*/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (byPunctuation.length >= 2) return byPunctuation;
+
+  return [trimmed];
+}
+
 function parseRemark(remark: string | null): { rationale: string; tip: string } {
-  if (!remark) {
+  if (!remark?.trim()) {
     return {
-      rationale: "Nutritional data is based on the USDA FoodData Central dataset.",
-      tip: "Always consult the patient's neurologist or dietitian before making dietary changes.",
+      rationale: DEFAULT_REMARK_RATIONALE,
+      tip: DEFAULT_CAREGIVER_TIP,
     };
   }
-  const sentences = remark.split(/(?<=[.!?])\s+/);
+
+  const sentences = splitRemarkSentences(remark);
   return {
-    rationale: sentences[0] ?? remark,
-    tip:
-      sentences.length > 1
-        ? sentences.slice(1).join(" ")
-        : "Always consult the patient's neurologist or dietitian before making dietary changes.",
+    rationale: sentences[0] ?? remark.trim(),
+    tip: sentences.length > 1 ? sentences[1] : DEFAULT_CAREGIVER_TIP,
   };
 }
 
@@ -134,6 +167,7 @@ function FilterBar({
   keyword: string; setKeyword: (v: string) => void;
   activeStatuses: SafetyStatus[]; toggleStatus: (s: SafetyStatus) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
 
@@ -143,7 +177,7 @@ function FilterBar({
         <input
           value={keyword}
           onChange={e => setKeyword(e.target.value)}
-          placeholder="Search foods…"
+          placeholder={t("nutritionLibrary.searchPlaceholder")}
           style={{
             width: "100%", paddingLeft: 36, paddingRight: keyword ? 32 : 12,
             paddingTop: 9, paddingBottom: 9,
@@ -175,7 +209,7 @@ function FilterBar({
               border: `1.5px solid ${on ? sc.c : sc.br}`,
               background: on ? sc.c : "#fff",
               color: on ? "#fff" : sc.tx,
-            }}>{s}</button>
+            }}>{translateEnum("safetyStatus", s)}</button>
           );
         })}
       </div>
@@ -191,6 +225,7 @@ function CatTabs({ activeCategories, toggleCategory, counts }: {
   toggleCategory: (c: string) => void;
   counts: Record<string, number>;
 }) {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function scroll(dir: "left" | "right") {
@@ -226,7 +261,7 @@ function CatTabs({ activeCategories, toggleCategory, counts }: {
               background: on ? "#2B3674" : "#fff", color: on ? "#fff" : "#A3AED0",
               border: `1.5px solid ${on ? "#2B3674" : "#E0E5F2"}`,
               boxShadow: on ? "0 4px 14px rgba(43,54,116,.25)" : "none",
-            }}>All</button>
+            }}>{t("nutritionLibrary.allTab")}</button>
           );
         })()}
         {/* Category tabs - multi-select */}
@@ -241,7 +276,7 @@ function CatTabs({ activeCategories, toggleCategory, counts }: {
               border: `1.5px solid ${on ? "#2B3674" : "#E0E5F2"}`,
               boxShadow: on ? "0 4px 14px rgba(43,54,116,.25)" : "none",
             }}>
-              {c}
+              {translateEnum("foodCategory", c)}
               {(counts[c] ?? 0) > 0 && (
                 <span style={{
                   fontSize: 10, padding: "1px 6px", borderRadius: 99,
@@ -266,6 +301,7 @@ function CatTabs({ activeCategories, toggleCategory, counts }: {
 // ─── Food Card ────────────────────────────────────────────────────────────────
 
 function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutrition) => void }) {
+  const { t } = useTranslation();
   const [flipped, setFlipped] = useState(false);
   const [hovered, setHovered] = useState(false);
   const status = food.safetyStatus as SafetyStatus;
@@ -284,7 +320,7 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
 
   return (
     <div
-      style={{ perspective: 1000, height: 500, cursor: "pointer" }}
+      style={{ perspective: 1000, height: "min(500px, 70vh)", cursor: "pointer" }}
       onClick={() => setFlipped(f => !f)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -332,7 +368,7 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
               <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>{food.calories} kcal</span>
             </div>
             <div style={{ position: "absolute", bottom: 10, right: 10, background: "rgb(146, 152, 180)", backdropFilter: "blur(6px)", borderRadius: 6, padding: "2px 8px" }}>
-              <span style={{ color: "#ffffff", fontSize: 9, fontWeight: 700, letterSpacing: ".04em" }}>TAP TO FLIP</span>
+              <span style={{ color: "#ffffff", fontSize: 9, fontWeight: 700, letterSpacing: ".04em" }}>{t("nutritionLibrary.tapToFlip")}</span>
             </div>
           </div>
 
@@ -371,7 +407,7 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
             onMouseEnter={e => (e.currentTarget.style.opacity = ".88")}
             onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
           >
-            <Plus size={13} color="#fff" /> Add to Ingredient Cart
+            <Plus size={13} color="#fff" /> {t("nutritionLibrary.addToIngredientCart")}
           </button>
         </div>
 
@@ -393,7 +429,7 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
               <IconBook />
               <span style={{ color: "rgba(255,255,255,.65)", fontSize: 9, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" }}>
-                Parkinson's Connection
+                {t("nutritionLibrary.parkinsonsConnection")}
               </span>
             </div>
             <p style={{
@@ -406,7 +442,7 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
           {/* Caregiver Tip */}
           <div style={{ background: "rgba(255,255,255,.08)", borderRadius: 11, padding: "10px 13px", border: "1px solid rgba(255,255,255,.1)", flexShrink: 0 }}>
             <span style={{ color: "rgba(255,255,255,.65)", fontSize: 9, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", display: "block", marginBottom: 4 }}>
-              💡 Caregiver Tip
+              💡 {t("nutritionLibrary.caregiverTip")}
             </span>
             <p style={{
               color: "rgba(255,255,255,.9)", fontSize: 10.5, lineHeight: 1.55,
@@ -418,13 +454,13 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
           {/* Key Nutrients */}
           <div style={{ background: "rgba(0,0,0,.18)", borderRadius: 11, padding: "10px 13px", flex: 1, minHeight: 0, overflow: "hidden" }}>
             <span style={{ color: "rgba(255,255,255,.65)", fontSize: 9, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", display: "block", marginBottom: 7 }}>
-              Key Nutrients (per 100g)
+              {t("nutritionLibrary.keyNutrients")}
             </span>
             {([
-              ["Protein", food.protein100g],
-              ["Saturated Fats", food.saturatedFats100g],
-              ["Dietary Fiber", food.fiber100g],
-              ["Carbohydrates", food.carbs100g],
+              [t("nutritionLibrary.protein"), food.protein100g],
+              [t("nutritionLibrary.saturatedFats"), food.saturatedFats100g],
+              [t("nutritionLibrary.dietaryFiber"), food.fiber100g],
+              [t("nutritionLibrary.carbohydrates"), food.carbs100g],
             ] as [string, number][]).map(([l, v]) => (
               <div key={l} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 5, marginBottom: 5, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
                 <span style={{ color: "rgba(255,255,255,.6)", fontSize: 10.5 }}>{l}</span>
@@ -462,11 +498,13 @@ function FoodCard({ food, onAdd }: { food: FoodNutrition; onAdd: (f: FoodNutriti
 
 // ─── Cart Panel ───────────────────────────────────────────────────────────────
 
-function CartPanel({ onClose, onGenerate, generating }: {
+function CartPanel({ onClose, onGenerate, generating, foodsById }: {
   onClose: () => void;
   onGenerate: () => void;
   generating: boolean;
+  foodsById: Map<number, FoodNutrition>;
 }) {
+  const { t } = useTranslation();
   const { items, removeItem, clearCart, totalCount } = useNutritionCart();
 
   return (
@@ -482,7 +520,10 @@ function CartPanel({ onClose, onGenerate, generating }: {
         initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 35 }}
         style={{
-          position: "fixed", top: 0, right: 0, height: "100%",
+          position: "fixed", top: 0, right: 0,
+          height: "100dvh",
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
           width: "min(380px,100vw)", background: "#fff", zIndex: 50,
           display: "flex", flexDirection: "column",
           boxShadow: "-10px 0 60px rgba(67,24,255,.14)",
@@ -492,10 +533,10 @@ function CartPanel({ onClose, onGenerate, generating }: {
         <div style={{ padding: "18px 20px", background: "linear-gradient(135deg,#4318FF,#6B35FF)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <ShoppingBag size={20} color="#fff" />
-            <span style={{ color: "#fff", fontWeight: 800, fontSize: 16 }}>Ingredient Cart</span>
+            <span style={{ color: "#fff", fontWeight: 800, fontSize: 16 }}>{t("nutritionLibrary.ingredientCart")}</span>
             {totalCount > 0 && (
               <span style={{ background: "rgba(255,255,255,.2)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 99 }}>
-                {totalCount} items
+                {t("nutritionLibrary.cartItemCount", { count: totalCount })}
               </span>
             )}
           </div>
@@ -509,17 +550,17 @@ function CartPanel({ onClose, onGenerate, generating }: {
           {items.length === 0 ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: "#A3AED0", textAlign: "center", padding: 32 }}>
               <ShoppingCart size={52} color="#E0E5F2" />
-              <p style={{ fontWeight: 700, fontSize: 14, color: "#2B3674" }}>Your cart is empty</p>
+              <p style={{ fontWeight: 700, fontSize: 14, color: "#2B3674" }}>{t("nutritionLibrary.cartEmpty")}</p>
               <p style={{ fontSize: 12, lineHeight: 1.6 }}>
-                Browse the Nutrition Library and add items using the + button on any card.
+                {t("nutritionLibrary.cartEmptyBrowseTip")}
               </p>
               <div style={{ width: "100%", marginTop: 8 }}>
                 <button type="button" disabled
                   style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "#E0E5F2", color: "#A3AED0", fontWeight: 700, fontSize: 13, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-                  <ChefHat size={15} /> Generate Recipe
+                  <ChefHat size={15} /> {t("nutritionLibrary.generateRecipe")}
                 </button>
                 <p style={{ fontSize: 11, color: "#A3AED0", marginTop: 8, lineHeight: 1.5 }}>
-                  Your basket is empty. Please add ingredients from the library above.
+                  {t("nutritionLibrary.cartBasketEmptyHint")}
                 </p>
               </div>
             </div>
@@ -529,10 +570,10 @@ function CartPanel({ onClose, onGenerate, generating }: {
               return (
                 <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "12px 14px", background: "#F8FAFF", borderRadius: 12, border: "1px solid #E0E5F2" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 12, color: "#2B3674", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.foodName}</p>
+                    <p style={{ fontWeight: 700, fontSize: 12, color: "#2B3674", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{foodsById.get(item.id)?.foodName ?? item.foodName}</p>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
                       <div style={{ width: 7, height: 7, borderRadius: "50%", background: sc.c, flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, color: "#A3AED0" }}>{item.category}</span>
+                      <span style={{ fontSize: 10, color: "#A3AED0" }}>{translateEnum("foodCategory", item.category)}</span>
                     </div>
                   </div>
 <button type="button" onClick={() => removeItem(item.id)}
@@ -549,7 +590,7 @@ function CartPanel({ onClose, onGenerate, generating }: {
         {items.length > 0 && (
           <div style={{ padding: "14px 16px", borderTop: "1px solid #E0E5F2", flexShrink: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 11, padding: "10px 14px", background: "#F8FAFF", borderRadius: 10 }}>
-              <span style={{ fontSize: 13, color: "#A3AED0", fontWeight: 600 }}>Total items</span>
+              <span style={{ fontSize: 13, color: "#A3AED0", fontWeight: 600 }}>{t("nutritionLibrary.totalItems")}</span>
               <span style={{ fontSize: 14, fontWeight: 800, color: "#2B3674" }}>{totalCount}</span>
             </div>
             <button type="button"
@@ -557,12 +598,12 @@ function CartPanel({ onClose, onGenerate, generating }: {
               disabled={generating}
               style={{ width: "100%", padding: "12px 0", border: "none", borderRadius: 10, background: generating ? "#A3AED0" : "linear-gradient(90deg,#4318FF 0%,#6B35FF 100%)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: generating ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginBottom: 10 }}>
               {generating ? <Loader2 size={15} className="animate-spin" /> : <ChefHat size={15} />}
-              {generating ? "Generating…" : "Generate Recipe"}
+              {generating ? t("nutritionLibrary.generatingRecipe") : t("nutritionLibrary.generateRecipe")}
             </button>
             <button type="button"
-              onClick={() => { clearCart(); toast.success("Cart cleared"); }}
+              onClick={() => { clearCart(); toast.success(t("nutritionLibrary.cartClearedToast")); }}
               style={{ width: "100%", padding: "11px 0", border: "2px solid #FEE2E2", borderRadius: 10, background: "none", color: "#EF4444", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              Clear Cart
+              {t("nutritionLibrary.clearCart")}
             </button>
           </div>
         )}
@@ -574,6 +615,7 @@ function CartPanel({ onClose, onGenerate, generating }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function NutritionLibraryPage() {
+  const { t } = useTranslation();
   const [allFoods, setAllFoods] = useState<FoodNutrition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -584,18 +626,22 @@ export function NutritionLibraryPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const { totalCount, addItem, items } = useNutritionCart();
+  const { totalCount, addItem, items, syncDisplayNamesFromFoods } = useNutritionCart();
   const { user } = useAuth();
+  const { currentLang } = useLanguage();
   const navigate = useNavigate();
 
   async function handleGenerateRecipe() {
     if (items.length === 0 || !user) return;
     setGenerating(true);
     try {
-      await recipeService.generateRecipe(items.map(i => i.foodName), user.caregiverId);
+      await recipeService.generateRecipe(
+        items.map(i => i.canonicalFoodName ?? i.foodName),
+        user.caregiverId,
+      );
       navigate("/recipes");
     } catch {
-      toast.error("Failed to generate recipe. Please try again.");
+      toast.error(t("nutritionLibrary.recipeFailedToast"));
     } finally {
       setGenerating(false);
     }
@@ -620,10 +666,14 @@ export function NutritionLibraryPage() {
     setError(null);
     nutritionService
       .getAll()
-      .then(data => { setAllFoods(data); setLoading(false); })
-      .catch(() => { setError("Failed to load food data. Please try again."); setLoading(false); });
+      .then(data => {
+        setAllFoods(data);
+        syncDisplayNamesFromFoods(data);
+        setLoading(false);
+      })
+      .catch(() => { setError(t("nutritionLibrary.failedLoadFood")); setLoading(false); });
   }
-  useEffect(() => { loadFoods(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadFoods(); }, [currentLang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // client-side filtering - empty arrays mean "all"
   const filtered = useMemo(() =>
@@ -649,18 +699,23 @@ export function NutritionLibraryPage() {
 
   const hasFilters = !!(keyword || activeCategories.length > 0 || activeStatuses.length > 0);
 
+  const foodsById = useMemo(
+    () => new Map(allFoods.map((f) => [f.id, f])),
+    [allFoods],
+  );
+
   function handleAdd(food: FoodNutrition) {
     addItem(food);
-    toast.success(`${food.foodName} added to cart`);
+    toast.success(t("nutritionLibrary.cartAddedFoodToast", { foodName: food.foodName }));
   }
 
   return (
-    <div className="pb-20">
+    <div className="pb-[calc(5rem+env(safe-area-inset-bottom,0px))] min-w-0">
       {/* Standard page header */}
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#2B3674]">Nutrition Library</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#2B3674]">{t("nutritionLibrary.title")}</h1>
         <p className="text-sm sm:text-base text-[#A3AED0] font-bold mt-1">
-          WHO-aligned food safety guidance for Parkinson's patients. Tap any card to reveal clinical insights and caregiver tips.
+          {t("nutritionLibrary.subtitle")}
         </p>
       </div>
 
@@ -678,26 +733,13 @@ export function NutritionLibraryPage() {
       {/* Results count */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 2 }}>
         <p style={{ fontSize: 12, color: "#A3AED0", fontWeight: 600 }}>
-          {loading ? "Loading…" : (
-            <>
-              <strong style={{ color: "#2B3674", fontWeight: 800 }}>{filtered.length}</strong>
-              {" "}food{filtered.length !== 1 ? "s" : ""} found
-              {activeCategories.length > 0 && (
-                <> in <strong style={{ color: "#4318FF" }}>{activeCategories.join(", ")}</strong></>
-              )}
-              {activeStatuses.length > 0 && (
-                <> · {activeStatuses.map((s, i) => (
-                  <span key={s} style={{ color: SC[s].c }}>{i > 0 ? ", " : ""}{s}</span>
-                ))}</>
-              )}
-            </>
-          )}
+          {loading ? t("common.loading") : t("nutritionLibrary.foodsFound", { count: filtered.length })}
         </p>
         {hasFilters && (
           <button type="button"
             onClick={() => { setKeyword(""); setActiveCategories([]); setActiveStatuses([]); }}
             style={{ fontSize: 11, fontWeight: 700, color: "#4318FF", background: "none", border: "none", cursor: "pointer", padding: "3px 8px", borderRadius: 8 }}>
-            Clear all filters
+            {t("nutritionLibrary.clearAllFilters")}
           </button>
         )}
       </div>
@@ -712,14 +754,14 @@ export function NutritionLibraryPage() {
           <p style={{ fontWeight: 700, fontSize: 14, color: "#EF4444" }}>{error}</p>
           <button type="button" onClick={loadFoods}
             style={{ padding: "8px 18px", background: "#4318FF", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 12, color: "#A3AED0" }}>
           <span style={{ fontSize: 44 }}>🍽️</span>
-          <p style={{ fontWeight: 700, fontSize: 14, color: "#2B3674", marginTop: 4 }}>No foods match your search</p>
-          <p style={{ fontSize: 12 }}>Try adjusting your filters or search term.</p>
+          <p style={{ fontWeight: 700, fontSize: 14, color: "#2B3674", marginTop: 4 }}>{t("nutritionLibrary.noFoodsMatch")}</p>
+          <p style={{ fontSize: 12 }}>{t("nutritionLibrary.adjustFilters")}</p>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(228px,1fr))", gap: 20, marginTop: 10 }}>
@@ -741,7 +783,10 @@ export function NutritionLibraryPage() {
         type="button"
         onClick={() => setCartOpen(true)}
         style={{
-          position: "fixed", bottom: 28, right: 28, zIndex: 44,
+          position: "fixed",
+          bottom: "calc(1.75rem + env(safe-area-inset-bottom, 0px))",
+          right: "calc(1.75rem + env(safe-area-inset-right, 0px))",
+          zIndex: 60,
           display: "flex", alignItems: "center", gap: 8,
           padding: "12px 20px",
           background: "linear-gradient(135deg,#4318FF 0%,#6B35FF 100%)",
@@ -754,7 +799,7 @@ export function NutritionLibraryPage() {
         onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 8px 32px rgba(67,24,255,.38)"; }}
       >
         <ShoppingBag size={16} color="#fff" />
-        Ingredient Cart
+        {t("nutritionLibrary.ingredientCart")}
         {totalCount > 0 && (
           <span style={{
             minWidth: 20, height: 20, borderRadius: 99, padding: "0 6px",
@@ -766,7 +811,14 @@ export function NutritionLibraryPage() {
 
       {/* Cart Drawer */}
       <AnimatePresence>
-        {cartOpen && <CartPanel onClose={() => setCartOpen(false)} onGenerate={handleGenerateRecipe} generating={generating} />}
+        {cartOpen && (
+          <CartPanel
+            onClose={() => setCartOpen(false)}
+            onGenerate={handleGenerateRecipe}
+            generating={generating}
+            foodsById={foodsById}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

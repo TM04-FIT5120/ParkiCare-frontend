@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -13,7 +14,6 @@ import {
   Trash2,
   Loader2,
   Bell,
-  Pencil,
   Coffee,
   Utensils,
   Moon,
@@ -24,8 +24,11 @@ import {
   ChefHat,
   Apple,
   FolderOpen,
+  Banknote,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatMonthYear, formatMonthShort, formatWeekday } from "@/lib/dateLocale";
 import { useCareEvents } from "@/hooks/useCareEvents";
 import { careEventsService } from "@/services/careEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
@@ -34,8 +37,9 @@ import {
   upsertCaregiverEventOccurrence,
 } from "@/services/caregiverEventOccurrences";
 import { dashboardService } from "@/services/dashboard";
-import { getMealSchedules, updateMealTime, generateWeeklyMeals } from "@/services/mealSchedule";
+import { getMealSchedules, generateWeeklyMeals, type MealScheduleEntry } from "@/services/mealSchedule";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   useMedicationAlert,
   useMedicationAlertSnoozeScheduler,
@@ -55,39 +59,7 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const HOURS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
-const MINUTES = ["00","05","10","15","20","25","30","35","40","45","50","55"];
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
-const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const WEEKDAY_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
 type CalendarView = "Week" | "Month";
-
-type MealRow = {
-  mealType: string;
-  label: string;
-  mealTime: string;
-  editHour: string;
-  editMinute: string;
-  editPeriod: "AM" | "PM";
-  editing: boolean;
-  saving: boolean;
-};
-
-const DEFAULT_MEALS: Omit<MealRow, "editing" | "saving">[] = [
-  { mealType: "BREAKFAST", label: "Breakfast", mealTime: "08:00", editHour: "08", editMinute: "00", editPeriod: "AM" },
-  { mealType: "LUNCH",     label: "Lunch",     mealTime: "13:00", editHour: "01", editMinute: "00", editPeriod: "PM" },
-  { mealType: "DINNER",    label: "Dinner",    mealTime: "19:00", editHour: "07", editMinute: "00", editPeriod: "PM" },
-];
-
-const MEAL_ICON_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
-  BREAKFAST: { icon: Coffee,   color: "#F59E0B", bg: "#FEF3C7" },
-  LUNCH:     { icon: Utensils, color: "#FB7185", bg: "#FFE4E6" },
-  DINNER:    { icon: Moon,     color: "#6366F1", bg: "#E0E7FF" },
-};
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -102,23 +74,21 @@ function addDaysStr(dateStr: string, n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function parseToEditFields(mealTime: string): { editHour: string; editMinute: string; editPeriod: "AM" | "PM" } {
-  const [hStr, mStr] = mealTime.split(":");
-  let h = parseInt(hStr, 10);
-  const period: "AM" | "PM" = h < 12 ? "AM" : "PM";
-  if (h === 0) h = 12;
-  else if (h > 12) h -= 12;
-  return { editHour: String(h).padStart(2, "0"), editMinute: mStr, editPeriod: period };
+function useIsMobile(breakpointPx = 640) {
+  const query = `(max-width: ${breakpointPx - 1}px)`;
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return isMobile;
 }
 
-function formatMealDisplayTime(mealTime: string): string {
-  const [hStr, mStr] = mealTime.split(":");
-  let h = parseInt(hStr, 10);
-  const period = h < 12 ? "AM" : "PM";
-  if (h === 0) h = 12;
-  else if (h > 12) h -= 12;
-  return `${h}:${mStr} ${period}`;
-}
 
 function resolveOutdoorSourceId(e: CareEvent): number {
   if (e.backendId != null) return e.backendId;
@@ -139,23 +109,15 @@ type DashboardScheduleRow = {
   source: "caregiver" | "medication" | "home" | "outdoor";
 };
 
-const TIMELINE_STYLES: Record<DashboardScheduleRow["source"], {
-  bg: string; color: string; label: string; icon: React.ReactNode;
-}> = {
-  medication: { bg: "#EDE9FE", color: "#4318FF", label: "Patient Medication", icon: <Pill className="w-4 h-4" /> },
-  home:       { bg: "#FEF3C7", color: "#B45309", label: "Patient Care",       icon: <Heart className="w-4 h-4" /> },
-  outdoor:    { bg: "#DCFCE7", color: "#047857", label: "Patient Outdoor",    icon: <MapPin className="w-4 h-4" /> },
-  caregiver:  { bg: "#EFF6FF", color: "#1D4ED8", label: "Caregiver",          icon: <CalendarIcon className="w-4 h-4" /> },
-};
-
 // ─── HeroSection ─────────────────────────────────────────────────────────────
 
 function HeroSection({ navigate }: { navigate: (path: string) => void }) {
   const shouldReduceMotion = useReducedMotion();
+  const { t } = useTranslation();
   const pills = [
-    { icon: <CalendarIcon className="w-4 h-4" />, title: "Stay organised",       sub: "Keep daily care on track" },
-    { icon: <Heart className="w-4 h-4" />,        title: "Plan with confidence",  sub: "Personalised care, every day" },
-    { icon: <Shield className="w-4 h-4" />,       title: "You're not alone",      sub: "Support for you and your loved one" },
+    { icon: <CalendarIcon className="w-4 h-4" />, title: t("dashboard.pill1Title"), sub: t("dashboard.pill1Sub") },
+    { icon: <Heart className="w-4 h-4" />,        title: t("dashboard.pill2Title"), sub: t("dashboard.pill2Sub") },
+    { icon: <Shield className="w-4 h-4" />,       title: t("dashboard.pill3Title"), sub: t("dashboard.pill3Sub") },
   ];
 
   return (
@@ -176,11 +138,11 @@ function HeroSection({ navigate }: { navigate: (path: string) => void }) {
         <div className="grid grid-cols-12 items-stretch min-h-[220px]">
           {/* Left: Welcome + pills */}
           <div className="col-span-12 md:col-span-6 px-7 py-8 md:py-9">
-            <h1 className="text-[32px] md:text-[40px] font-extrabold leading-tight tracking-tight text-[#1F2247]">
-              Welcome to ParkiCare
+            <h1 className="text-2xl sm:text-[32px] md:text-[40px] font-extrabold leading-tight tracking-tight text-[#1F2247]">
+              {t("dashboard.welcomeTitle")}
             </h1>
             <p className="mt-2 text-sm text-[#4F567E]">
-              Your daily care companion for Parkinson's care at home.
+              {t("dashboard.welcomeSubtitle")}
             </p>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
               {pills.map((p) => (
@@ -215,9 +177,9 @@ function HeroSection({ navigate }: { navigate: (path: string) => void }) {
                   <Heart className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[16px] font-extrabold leading-tight text-[#1F2247]">Need support?</h3>
+                  <h3 className="text-[16px] font-extrabold leading-tight text-[#1F2247]">{t("dashboard.supportTitle")}</h3>
                   <p className="text-[12px] text-[#6B7299] mt-1.5 leading-snug">
-                    MIASA Malaysia offers free mental health crisis support. You are not alone.
+                    {t("dashboard.supportDesc")}
                   </p>
                 </div>
               </div>
@@ -226,14 +188,14 @@ function HeroSection({ navigate }: { navigate: (path: string) => void }) {
                   href="tel:1800180066"
                   className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#4318FF] hover:bg-[#3412C7] text-white text-[12px] font-extrabold transition-colors shadow-sm"
                 >
-                  <Phone className="w-3 h-3" /> Call Now
+                  <Phone className="w-3 h-3" /> {t("dashboard.callNow")}
                 </a>
                 <button
                   type="button"
                   onClick={() => navigate("/knowledge-hub#miasa-support")}
                   className="flex-1 inline-flex items-center justify-center py-2 rounded-lg bg-white text-[#4318FF] text-[12px] font-extrabold border border-[#E9E3FF] hover:bg-[#F4F2FF] transition-colors cursor-pointer"
                 >
-                  Read More
+                  {t("dashboard.readMore")}
                 </button>
               </div>
             </div>
@@ -261,10 +223,11 @@ function DateCard({
   careCount: number;
   onClick: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const d = new Date(dateStr + "T00:00:00");
   const day = d.getDate();
-  const month = MONTH_SHORT[d.getMonth()];
-  const weekday = WEEKDAY_SHORT[d.getDay()];
+  const month = formatMonthShort(d, i18n.language);
+  const weekday = formatWeekday(d, "short", i18n.language);
 
   return (
     <button
@@ -291,17 +254,17 @@ function DateCard({
       <div className={`mt-3 pt-3 space-y-1.5 border-t ${isSelected ? "border-white/20" : "border-[#EEEAFB]"}`}>
         <div className="flex items-center gap-2">
           <Pill className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white/80" : "text-[#4318FF]"}`} />
-          <span className={`text-[11px] font-bold ${isSelected ? "text-white" : "text-[#1F2247]"}`}>{medCount} medication{medCount !== 1 ? "s" : ""}</span>
+          <span className={`text-[11px] font-bold ${isSelected ? "text-white" : "text-[#1F2247]"}`}>{medCount} {medCount !== 1 ? t("dashboard.medication_other") : t("dashboard.medication_one")}</span>
         </div>
         <div className="flex items-center gap-2">
           <Heart className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white/80" : "text-[#F59E0B]"}`} />
-          <span className={`text-[11px] font-bold ${isSelected ? "text-white" : "text-[#1F2247]"}`}>{careCount} care event{careCount !== 1 ? "s" : ""}</span>
+          <span className={`text-[11px] font-bold ${isSelected ? "text-white" : "text-[#1F2247]"}`}>{careCount} {careCount !== 1 ? t("dashboard.careEvent_other") : t("dashboard.careEvent_one")}</span>
         </div>
       </div>
 
       {isToday && !isSelected && (
         <span className="absolute -top-2 right-3 px-2 py-0.5 rounded-md bg-[#FBBF24] text-[#1F2247] text-[9px] font-extrabold uppercase tracking-wider shadow-sm">
-          Today
+          {t("common.today")}
         </span>
       )}
     </button>
@@ -325,6 +288,8 @@ function MonthGrid({
   todayStr: string;
   getDateEventBreakdown: (d: string) => { med: number; home: number; outdoor: number; caregiver: number };
 }) {
+  const { t } = useTranslation();
+  const weekdayShort = t("calendar.weekdaysShort", { returnObjects: true }) as string[];
   const firstOfMonth = new Date(year, month, 1);
   const startDow = firstOfMonth.getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -345,7 +310,7 @@ function MonthGrid({
   return (
     <div>
       <div className="grid grid-cols-7 gap-0.5 mb-1">
-        {WEEKDAY_SHORT.map((d) => (
+        {weekdayShort.map((d) => (
           <div key={d} className="text-[8px] font-extrabold uppercase tracking-widest text-[#A3AED0] text-center py-0.5">{d}</div>
         ))}
       </div>
@@ -399,7 +364,7 @@ function MonthGrid({
   );
 }
 
-// ─── Care Calendar Section ────────────────────────────────────────────────────
+// ─── Calendar Section ────────────────────────────────────────────────────
 
 function CareCalendarSection({
   selectedDate,
@@ -425,11 +390,16 @@ function CareCalendarSection({
   getDateEventBreakdown: (d: string) => { med: number; home: number; outdoor: number; caregiver: number };
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { t, i18n } = useTranslation();
+  const isMobile = useIsMobile();
 
-  // Week view: always 7 days with today in the centre
+  // Week view: 7 days centred on today (desktop); selected day ±1 (mobile)
   const visibleDates = useMemo(
-    () => [-3, -2, -1, 0, 1, 2, 3].map((o) => addDaysStr(todayStr, o)),
-    [todayStr],
+    () =>
+      isMobile
+        ? [-1, 0, 1].map((o) => addDaysStr(selectedDate, o))
+        : [-3, -2, -1, 0, 1, 2, 3].map((o) => addDaysStr(todayStr, o)),
+    [isMobile, selectedDate, todayStr],
   );
 
   const navPrev = () => {
@@ -445,10 +415,11 @@ function CareCalendarSection({
     }
   };
 
+  const anchorMonthDate = new Date(anchorMonth.year, anchorMonth.month, 1);
   const subtitle =
     view === "Month"
-      ? `${MONTH_NAMES[anchorMonth.month]} ${anchorMonth.year}`
-      : "Tap a day to see the care plan";
+      ? formatMonthYear(anchorMonthDate, i18n.language)
+      : t("dashboard.tapDay");
 
   return (
     <motion.div
@@ -460,7 +431,7 @@ function CareCalendarSection({
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-5 shrink-0">
         <div>
-          <h2 className="text-[20px] font-extrabold tracking-tight text-[#1F2247]">Care Calendar</h2>
+          <h2 className="text-[20px] font-extrabold tracking-tight text-[#1F2247]">{t("dashboard.calendarTitle")}</h2>
           <p className="text-[12px] text-[#6B7299] mt-0.5">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -476,7 +447,7 @@ function CareCalendarSection({
                     : "text-[#A3AED0] hover:text-[#4318FF]"
                   }`}
               >
-                {v}
+                {v === "Week" ? t("dashboard.weekView") : t("dashboard.monthView")}
               </button>
             ))}
           </div>
@@ -491,11 +462,11 @@ function CareCalendarSection({
         const isSelToday = selectedDate === todayStr;
 
         const LEGEND = [
-          { color: "#4318FF", bg: "#EDE9FE", label: "Patient Medication",              count: bd.med,       Icon: Pill },
-          { color: "#F59E0B", bg: "#FEF3C7", label: "Patient Home Care Event", count: bd.home,      Icon: Heart },
-          { color: "#10B981", bg: "#DCFCE7", label: "Patient Outdoor Event",   count: bd.outdoor,   Icon: MapPin },
-          { color: "#3B82F6", bg: "#EFF6FF", label: "Caregiver Event",         count: bd.caregiver, Icon: CalendarIcon },
-        ] as const;
+          { color: "#4318FF", bg: "#EDE9FE", label: t("dashboard.patientMedication"), count: bd.med,       Icon: Pill },
+          { color: "#F59E0B", bg: "#FEF3C7", label: t("dashboard.patientHomeCare"),   count: bd.home,      Icon: Heart },
+          { color: "#10B981", bg: "#DCFCE7", label: t("dashboard.patientOutdoor"),    count: bd.outdoor,   Icon: MapPin },
+          { color: "#3B82F6", bg: "#EFF6FF", label: t("dashboard.caregiverEvent"),    count: bd.caregiver, Icon: CalendarIcon },
+        ];
 
         return (
           <div>
@@ -509,7 +480,7 @@ function CareCalendarSection({
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <p className="flex-1 text-[13px] font-extrabold text-[#1F2247] text-center">
-                {MONTH_NAMES[anchorMonth.month]} {anchorMonth.year}
+                {formatMonthYear(anchorMonthDate, i18n.language)}
               </p>
               <button
                 type="button"
@@ -521,8 +492,7 @@ function CareCalendarSection({
             </div>
 
             {/* Grid: left = month calendar, right = legend + day summary */}
-            <div className="grid grid-cols-2 gap-4 items-start">
-              {/* Month grid - unchanged size */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <MonthGrid
                 selectedDate={selectedDate}
                 onSelectDate={setSelectedDate}
@@ -532,13 +502,13 @@ function CareCalendarSection({
                 getDateEventBreakdown={getDateEventBreakdown}
               />
 
-              {/* Right panel */}
-              <div className="flex flex-col gap-3 h-full">
+              {/* Right panel — hidden on mobile */}
+              <div className="hidden md:flex flex-col gap-3 h-full min-w-0">
 
                 {/* ── Legend ─────────────────────────────────────────────────── */}
                 <div className="rounded-2xl border border-[#EEEAFB] bg-gradient-to-br from-[#F8F6FF] to-white p-4">
                   <p className="text-[10px] font-extrabold uppercase tracking-widest text-[#A3AED0] mb-3">
-                    Color Legend
+                    {t("dashboard.colorLegend")}
                   </p>
                   <div className="space-y-1.5">
                     {LEGEND.map(({ color, bg, label, Icon }) => (
@@ -570,7 +540,7 @@ function CareCalendarSection({
                       className="text-[10px] font-extrabold uppercase tracking-widest mb-1"
                       style={{ color: isSelToday ? "rgba(255,255,255,0.7)" : "#A3AED0" }}
                     >
-                      {isSelToday ? "Today" : selD.toLocaleDateString("en-US", { weekday: "long" })}
+                      {isSelToday ? t("common.today") : formatWeekday(selD, "long", i18n.language)}
                     </p>
                     <div className="flex items-end justify-between">
                       <div>
@@ -584,7 +554,7 @@ function CareCalendarSection({
                           className="text-[13px] font-semibold ml-1.5"
                           style={{ color: isSelToday ? "rgba(255,255,255,0.75)" : "#6B7299" }}
                         >
-                          {selD.toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                          {`${formatMonthShort(selD, i18n.language)} ${selD.getFullYear()}`}
                         </span>
                       </div>
                       {/* Total badge */}
@@ -607,7 +577,7 @@ function CareCalendarSection({
                         <div className="w-9 h-9 rounded-xl bg-[#F4F2FF] flex items-center justify-center">
                           <Moon className="w-4 h-4 text-[#A3AED0]" />
                         </div>
-                        <p className="text-[11px] font-bold text-[#A3AED0]">No events this day</p>
+                        <p className="text-[11px] font-bold text-[#A3AED0]">{t("dashboard.noEventsDay")}</p>
                       </div>
                     ) : (
                       LEGEND.map(({ color, bg, label, Icon, count }) =>
@@ -638,7 +608,7 @@ function CareCalendarSection({
         );
       })() : (
         <div className="flex-1 min-h-0">
-          <div className="grid grid-cols-4 sm:grid-cols-7 gap-3 h-full">
+          <div className={`grid gap-3 h-full ${isMobile ? "grid-cols-3" : "grid-cols-7"}`}>
             {visibleDates.map((d) => (
               <DateCard
                 key={d}
@@ -681,15 +651,22 @@ function DayTimeline({
   deletingKeys: Set<string>;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { t, i18n } = useTranslation();
   const isToday = selectedDate === todayStr;
   const now = getMYTNow();
+  const TIMELINE_STYLES: Record<DashboardScheduleRow["source"], { bg: string; color: string; label: string; icon: React.ReactNode }> = {
+    medication: { bg: "#EDE9FE", color: "#4318FF", label: t("dashboard.patientMedication"), icon: <Pill className="w-4 h-4" /> },
+    home:       { bg: "#FEF3C7", color: "#B45309", label: t("dashboard.patientHomeCare"),   icon: <Heart className="w-4 h-4" /> },
+    outdoor:    { bg: "#DCFCE7", color: "#047857", label: t("dashboard.patientOutdoor"),    icon: <MapPin className="w-4 h-4" /> },
+    caregiver:  { bg: "#EFF6FF", color: "#1D4ED8", label: t("dashboard.caregiverEvent"),    icon: <CalendarIcon className="w-4 h-4" /> },
+  };
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const d = new Date(selectedDate + "T00:00:00");
   const dateLabel = isToday
-    ? "Today"
-    : d.toLocaleDateString("en-US", { weekday: "long" });
-  const dateSubLabel = `${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
+    ? t("common.today")
+    : formatWeekday(d, "long", i18n.language);
+  const dateSubLabel = `${formatMonthShort(d, i18n.language)} ${d.getDate()}`;
 
   const completed = schedule.filter((e) => e.completed).length;
   const progressPct = schedule.length ? Math.round((completed / schedule.length) * 100) : 0;
@@ -723,9 +700,9 @@ function DayTimeline({
           </h2>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <p className="text-[12px] text-[#6B7299]">
-              {schedule.length} scheduled ·{" "}
-              <span className="text-[#10B981] font-bold">{completed} done</span>{" "}
-              · <span className="text-[#F59E0B] font-bold">{schedule.length - completed} to go</span>
+              {schedule.length} {t("dashboard.scheduled")} ·{" "}
+              <span className="text-[#10B981] font-bold">{completed} {t("dashboard.done")}</span>{" "}
+              · <span className="text-[#F59E0B] font-bold">{schedule.length - completed} {t("dashboard.toGo")}</span>
             </p>
             <AnimatePresence mode="popLayout">
               {pendingCount > 0 && (
@@ -736,7 +713,7 @@ function DayTimeline({
                   exit={{ scale: 0.7, opacity: 0 }}
                   className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200"
                 >
-                  {pendingCount} pending
+                  {pendingCount} {t("dashboard.pending")}
                 </motion.span>
               )}
               {overdueCount > 0 && (
@@ -747,7 +724,7 @@ function DayTimeline({
                   exit={{ scale: 0.7, opacity: 0 }}
                   className="px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full border border-red-200"
                 >
-                  {overdueCount} overdue
+                  {overdueCount} {t("dashboard.overdue")}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -787,8 +764,8 @@ function DayTimeline({
           <div className="w-12 h-12 rounded-2xl bg-[#F4F2FF] flex items-center justify-center mx-auto mb-3">
             <Moon className="w-5 h-5 text-[#A3AED0]" />
           </div>
-          <p className="text-sm font-bold text-[#A3AED0]">No tasks scheduled for this day</p>
-          <p className="text-xs text-[#A3AED0]/70 mt-1">Select another day or add events →</p>
+          <p className="text-sm font-bold text-[#A3AED0]">{t("dashboard.noTasks")}</p>
+          <p className="text-xs text-[#A3AED0]/70 mt-1">{t("dashboard.addEvents")}</p>
         </div>
       ) : (
         <ol className="relative space-y-2.5">
@@ -854,7 +831,7 @@ function DayTimeline({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className={`text-[14px] font-extrabold tracking-tight truncate ${item.completed ? "text-[#A3AED0] line-through" : "text-[#1F2247]"}`}>
-                          {item.title}
+                          {item.title === "Breakfast" ? t("dashboard.breakfast") : item.title === "Lunch" ? t("dashboard.lunch") : item.title === "Dinner" ? t("dashboard.dinner") : item.title}
                         </p>
                         <span
                           className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-widest whitespace-nowrap"
@@ -864,11 +841,11 @@ function DayTimeline({
                         </span>
                         {isNext && (
                           <span className="px-1.5 py-0.5 rounded-md bg-[#F59E0B] text-white text-[9px] font-extrabold uppercase tracking-widest animate-pulse whitespace-nowrap">
-                            Up next
+                            {t("dashboard.upNext")}
                           </span>
                         )}
                         {item.completed && (
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#4318FF] bg-[#E9E3FF] px-2 py-0.5 rounded-md">Done</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#4318FF] bg-[#E9E3FF] px-2 py-0.5 rounded-md">{t("common.done")}</span>
                         )}
                       </div>
                       <p className="text-[12px] text-[#6B7299] mt-0.5 flex items-center gap-1">
@@ -902,27 +879,27 @@ function DayTimeline({
 
 // ─── Quick Actions Grid ───────────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
-  { title: "Medication Plan",              desc: "Set reminders and track medications.",                                   icon: Pill,      color: "#4318FF", bg: "#EDE9FE", path: "/care-events#medication-section" },
-  { title: "Caregiver and Patient Events", desc: "Log care activities and monitor daily progress.",                        icon: Heart,     color: "#F97316", bg: "#FFF7ED", path: "/care-events#care-event-section" },
-  { title: "AI Suggested Events",          desc: "Plan meaningful outdoor/indoor activities suited best for the patient.", icon: MapPin,    color: "#10B981", bg: "#ECFDF5", path: "/care-events#outdoor-event-section" },
-  { title: "Digital Records",              desc: "Access reports, documents and health history.",                          icon: FolderOpen,color: "#3B82F6", bg: "#EFF6FF", path: "/digital-records" },
-  { title: "Nutrition Library",            desc: "Explore nutrition tips, meal planning guidance.",                        icon: Apple,     color: "#8B5CF6", bg: "#F5F3FF", path: "/nutrition-library" },
-  { title: "Recipes",                      desc: "Access your Parkinson friendly generated recipes.",                      icon: ChefHat,  color: "#F59E0B", bg: "#FEF3C7", path: "/recipes" },
-];
-
 function QuickActionsGrid({ navigate }: { navigate: (path: string) => void }) {
   const shouldReduceMotion = useReducedMotion();
+  const { t } = useTranslation();
+  const QUICK_ACTIONS = [
+    { title: t("dashboard.qa1Title"), desc: t("dashboard.qa1Desc"), icon: Pill,       color: "#4318FF", bg: "#EDE9FE", path: "/care-events#medication-section" },
+    { title: t("dashboard.qa2Title"), desc: t("dashboard.qa2Desc"), icon: Heart,      color: "#F97316", bg: "#FFF7ED", path: "/care-events#events-section" },
+    { title: t("dashboard.qa3Title"), desc: t("dashboard.qa3Desc"), icon: MapPin,     color: "#10B981", bg: "#ECFDF5", path: "/care-events#environment-section" },
+    { title: t("dashboard.qa4Title"), desc: t("dashboard.qa4Desc"), icon: FolderOpen, color: "#3B82F6", bg: "#EFF6FF", path: "/digital-records" },
+    { title: t("dashboard.qa5Title"), desc: t("dashboard.qa5Desc"), icon: Apple,      color: "#8B5CF6", bg: "#F5F3FF", path: "/nutrition-library" },
+    { title: t("dashboard.qa6Title"), desc: t("dashboard.qa6Desc"), icon: ChefHat,   color: "#F59E0B", bg: "#FEF3C7", path: "/recipes" },
+  ];
 
   return (
     <motion.div
       initial={shouldReduceMotion ? {} : { opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="h-full flex flex-col bg-white rounded-[26px] p-6 border border-[#EEEAFB] shadow-[0_4px_24px_-16px_rgba(67,24,255,0.12)]"
+      className="h-full flex flex-col bg-white rounded-[26px] p-4 sm:p-6 border border-[#EEEAFB] shadow-[0_4px_24px_-16px_rgba(67,24,255,0.12)] min-w-0"
     >
-      <h2 className="text-[20px] font-extrabold tracking-tight text-[#1F2247] mb-5 shrink-0">
-        What would you like to manage today?
+      <h2 className="text-lg sm:text-[20px] font-extrabold tracking-tight text-[#1F2247] mb-4 sm:mb-5 shrink-0">
+        {t("dashboard.quickActionsTitle")}
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 auto-rows-fr">
         {QUICK_ACTIONS.map((a) => (
@@ -950,66 +927,52 @@ function QuickActionsGrid({ navigate }: { navigate: (path: string) => void }) {
   );
 }
 
-// ─── Meal Planner Sidebar ─────────────────────────────────────────────────────
+// ─── Steps To Take Next ──────────────────────────────────────────────────────
 
-function MealPlannerSidebar({
-  caregiverId,
-  onSaved,
+function StepsToTakeNext({
+  mealConfigured,
+  hasMedications,
+  hasEvents,
+  navigate,
 }: {
-  caregiverId: number;
-  onSaved: () => void;
+  mealConfigured: boolean;
+  hasMedications: boolean;
+  hasEvents: boolean;
+  navigate: (path: string) => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
-  const [rows, setRows] = useState<MealRow[]>(() =>
-    DEFAULT_MEALS.map((m) => ({ ...m, editing: false, saving: false }))
-  );
+  const { t } = useTranslation();
 
-  useEffect(() => {
-    if (!caregiverId) return;
-    getMealSchedules(caregiverId)
-      .then((entries) => {
-        setRows((prev) =>
-          prev.map((row) => {
-            const found = entries.find((e) => e.mealType === row.mealType);
-            if (!found) return row;
-            return { ...row, mealTime: found.mealTime, ...parseToEditFields(found.mealTime) };
-          })
-        );
-      })
-      .catch(() => {});
-  }, [caregiverId]);
-
-  function startEdit(mealType: string) {
-    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, editing: true } : r)));
-  }
-  function cancelEdit(mealType: string) {
-    setRows((prev) =>
-      prev.map((r) => r.mealType === mealType ? { ...r, editing: false, ...parseToEditFields(r.mealTime) } : r)
-    );
-  }
-  async function saveEdit(mealType: string) {
-    const row = rows.find((r) => r.mealType === mealType);
-    if (!row) return;
-    let h = parseInt(row.editHour, 10);
-    if (row.editPeriod === "AM" && h === 12) h = 0;
-    if (row.editPeriod === "PM" && h !== 12) h += 12;
-    const newTime = `${String(h).padStart(2, "0")}:${row.editMinute}`;
-    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, saving: true } : r)));
-    try {
-      await updateMealTime(caregiverId, mealType, newTime);
-      setRows((prev) =>
-        prev.map((r) => r.mealType === mealType ? { ...r, mealTime: newTime, editing: false, saving: false } : r)
-      );
-      toast.success("Meal time saved");
-      onSaved();
-    } catch {
-      toast.error("Failed to save meal time");
-      setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, saving: false } : r)));
-    }
-  }
-  function setField(mealType: string, field: "editHour" | "editMinute" | "editPeriod", value: string) {
-    setRows((prev) => prev.map((r) => (r.mealType === mealType ? { ...r, [field]: value } : r)));
-  }
+  const steps = [
+    {
+      icon: Utensils,
+      title: t("dashboard.stepMealTitle"),
+      desc: t("dashboard.stepMealDesc"),
+      done: mealConfigured,
+      href: "/care-events#meal-schedule-section",
+    },
+    {
+      icon: Pill,
+      title: t("dashboard.stepMedTitle"),
+      desc: t("dashboard.stepMedDesc"),
+      done: hasMedications,
+      href: "/care-events#medication-section",
+    },
+    {
+      icon: Coffee,
+      title: t("dashboard.stepAITitle"),
+      desc: t("dashboard.stepAIDesc"),
+      done: false,
+      href: "/care-events#environment-section",
+    },
+    {
+      icon: CalendarIcon,
+      title: t("dashboard.stepEventsTitle"),
+      desc: t("dashboard.stepEventsDesc"),
+      done: hasEvents,
+      href: "/care-events#events-section",
+    },
+  ];
 
   return (
     <motion.div
@@ -1018,92 +981,40 @@ function MealPlannerSidebar({
       transition={{ duration: 0.5, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
       className="h-full flex flex-col bg-white rounded-[26px] p-5 border border-[#EEEAFB] shadow-[0_4px_24px_-16px_rgba(67,24,255,0.12)]"
     >
-      <h3 className="text-[20px] font-extrabold tracking-tight text-[#1F2247] mb-4 shrink-0">Meal Schedule</h3>
-      <div className="flex-1 flex flex-col justify-between gap-2">
-        {rows.map((row) => {
-          const cfg = MEAL_ICON_CONFIG[row.mealType];
-          return (
-            <div key={row.mealType} className="rounded-2xl overflow-hidden flex-1 flex flex-col justify-center">
-              {!row.editing ? (
-                <div className="flex items-center gap-3 p-3 rounded-2xl border border-[#EEEAFB] hover:bg-[#F8F6FF] transition-colors h-full">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: cfg.bg, color: cfg.color }}
-                  >
-                    <cfg.icon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest font-extrabold text-[#A3AED0]">{row.label}</p>
-                    <p className="text-[15px] font-extrabold text-[#1F2247] mt-0.5">{formatMealDisplayTime(row.mealTime)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(row.mealType)}
-                    className="w-8 h-8 rounded-xl hover:bg-[#F4F2FF] flex items-center justify-center text-[#A3AED0] hover:text-[#4318FF] transition-colors cursor-pointer"
-                    title="Edit time"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-[#F8F6FF] rounded-2xl px-4 py-3 border border-[#4318FF]/20 space-y-2">
-                  <p className="text-[10px] font-bold text-[#4318FF] uppercase tracking-widest">{row.label}</p>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={row.editHour}
-                      onChange={(e) => setField(row.mealType, "editHour", e.target.value)}
-                      className="flex-1 px-2 py-1.5 bg-white border border-[#E0E5F2] rounded-lg text-xs font-bold text-[#1F2247] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30"
-                    >
-                      {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                    <span className="text-[#4318FF] font-bold text-sm">:</span>
-                    <select
-                      value={row.editMinute}
-                      onChange={(e) => setField(row.mealType, "editMinute", e.target.value)}
-                      className="flex-1 px-2 py-1.5 bg-white border border-[#E0E5F2] rounded-lg text-xs font-bold text-[#1F2247] focus:outline-none focus:ring-2 focus:ring-[#4318FF]/30"
-                    >
-                      {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <div className="flex rounded-lg overflow-hidden border border-[#4318FF]/30">
-                      {(["AM", "PM"] as const).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setField(row.mealType, "editPeriod", p)}
-                          className={`px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer
-                            ${row.editPeriod === p
-                              ? "bg-[#4318FF] text-white"
-                              : "bg-white text-[#A3AED0] hover:bg-[#F4F2FF]"}`}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => cancelEdit(row.mealType)}
-                      disabled={row.saving}
-                      className="flex-1 py-1.5 bg-white text-[#A3AED0] text-xs font-bold rounded-lg border border-[#E0E5F2] transition-all disabled:opacity-50 cursor-pointer hover:bg-[#F4F7FE]"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => saveEdit(row.mealType)}
-                      disabled={row.saving}
-                      className="flex-1 py-1.5 bg-[#4318FF] hover:bg-[#3412C7] text-white text-xs font-bold rounded-lg transition-all disabled:opacity-70 flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      {row.saving && <Loader2 className="w-3 h-3 animate-spin" />}
-                      Save
-                    </button>
-                  </div>
-                </div>
-              )}
+      <div className="mb-4 shrink-0">
+        <h3 className="text-[20px] font-extrabold tracking-tight text-[#1F2247]">{t("dashboard.stepsTitle")}</h3>
+        <p className="text-xs text-[#A3AED0] font-medium mt-0.5">{t("dashboard.stepsSubtitle")}</p>
+      </div>
+      <div className="flex-1 flex flex-col gap-2.5">
+        {steps.map((step, i) => (
+          <motion.button
+            key={i}
+            type="button"
+            onClick={() => navigate(step.href)}
+            initial={shouldReduceMotion ? {} : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.15 + i * 0.07 }}
+            className="flex items-center gap-3 p-3 rounded-2xl border border-[#EEEAFB] hover:bg-[#F8F6FF] hover:border-[#D6CBFF] transition-all cursor-pointer text-left w-full group"
+          >
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all
+                ${step.done
+                  ? "bg-emerald-100"
+                  : "bg-gradient-to-br from-[#4318FF] to-[#8B5CF6]"}`}
+            >
+              {step.done
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                : <step.icon className="w-4 h-4 text-white" />}
             </div>
-          );
-        })}
+            <div className="flex-1 min-w-0">
+              <p className={`text-[13px] font-extrabold leading-tight ${step.done ? "text-[#A3AED0] line-through" : "text-[#1F2247]"}`}>
+                {i + 1}. {step.title}
+              </p>
+              <p className="text-[11px] text-[#A3AED0] font-medium mt-0.5 truncate">{step.desc}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#A3AED0] group-hover:text-[#4318FF] transition-colors shrink-0" />
+          </motion.button>
+        ))}
       </div>
     </motion.div>
   );
@@ -1112,11 +1023,28 @@ function MealPlannerSidebar({
 // ─── Main DashboardPage ───────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const { meds: patientMedications, events: patientEventsStore, deleteMed, deleteEvent } = useCareEvents();
+  const {
+    meds: patientMedications,
+    events: patientEventsStore,
+    deleteMed,
+    deleteEvent,
+    loading: careEventsLoading,
+  } = useCareEvents();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentLang } = useLanguage();
+  const { t } = useTranslation();
   const caregiverId = user?.caregiverId ?? 0;
   const shouldReduceMotion = useReducedMotion();
+
+  // ── BPT banner ─────────────────────────────────────────────────────────────
+  const [showBptBanner, setShowBptBanner] = useState(
+    () => localStorage.getItem("bptBannerDismissed") !== "true"
+  );
+  const handleDismissBptBanner = () => {
+    localStorage.setItem("bptBannerDismissed", "true");
+    setShowBptBanner(false);
+  };
 
   // ── Calendar state ──────────────────────────────────────────────────────────
   const todayStr = getMYTDateString();
@@ -1145,11 +1073,16 @@ export function DashboardPage() {
   const [agenda, setAgenda] = useState<
     { id: number; title: string; time: string; startDatetime: string; endDatetime: string; recurrence: string | null }[]
   >([]);
+  const [isAgendaLoading, setIsAgendaLoading] = useState(true);
 
   // ── Data fetching ───────────────────────────────────────────────────────────
 
   const refreshCompletions = useCallback(async () => {
-    if (!caregiverId) return;
+    if (!caregiverId) {
+      setIsCompletionsLoading(false);
+      return;
+    }
+    setIsCompletionsLoading(true);
     try {
       const from = addDaysMYT(-14);
       const to = addDaysMYT(60);
@@ -1168,19 +1101,31 @@ export function DashboardPage() {
   }, [caregiverId]);
 
   const refreshAgenda = useCallback(() => {
-    if (!caregiverId) return;
-    caregiverScheduleService.getSchedules(caregiverId).then((schedules) => {
-      setAgenda(
-        schedules.map((s) => ({
-          id: s.id,
-          title: s.scheduleTitle,
-          time: s.startDatetime.slice(11, 16),
-          startDatetime: s.startDatetime,
-          endDatetime: s.endDatetime,
-          recurrence: s.recurrence ?? null,
-        })),
-      );
-    }).catch(() => {});
+    if (!caregiverId) {
+      setIsAgendaLoading(false);
+      return;
+    }
+    setIsAgendaLoading(true);
+    caregiverScheduleService
+      .getSchedules(caregiverId)
+      .then((schedules) => {
+        setAgenda(
+          schedules
+            .filter((s) => s.startDatetime)
+            .map((s) => ({
+              id: s.id,
+              title: s.scheduleTitle,
+              time: s.startDatetime.slice(11, 16),
+              startDatetime: s.startDatetime,
+              endDatetime: s.endDatetime,
+              recurrence: s.recurrence ?? null,
+            })),
+        );
+      })
+      .catch((err) => {
+        console.warn("Failed to load caregiver schedules:", err);
+      })
+      .finally(() => setIsAgendaLoading(false));
   }, [caregiverId]);
 
   useEffect(() => {
@@ -1197,11 +1142,19 @@ export function DashboardPage() {
     }
     dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
     dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
-  }, [caregiverId, refreshAgenda, todayStr]);
+  }, [caregiverId, currentLang, refreshAgenda, todayStr]);
+
+  const [dashMealSchedules, setDashMealSchedules] = useState<MealScheduleEntry[]>([]);
+  useEffect(() => {
+    if (!caregiverId) return;
+    getMealSchedules(caregiverId).then(setDashMealSchedules).catch(() => {});
+  }, [caregiverId]);
 
   useEffect(() => {
     refreshCompletions();
-  }, [refreshCompletions]);
+  }, [refreshCompletions, currentLang]);
+
+  const isScheduleLoading = isCompletionsLoading || careEventsLoading || isAgendaLoading;
 
   // ── Calendar date summary helpers ───────────────────────────────────────────
 
@@ -1331,12 +1284,12 @@ export function DashboardPage() {
         occurrenceStart: confirmRow.occurrenceStart,
         completed: wantComplete,
       });
-      toast.success(confirmMode === "undo" ? "Task marked as incomplete." : "Task marked as complete!");
-      dashboardService.getPendingTasks(caregiverId).then((t) => setPendingCount(t.length)).catch(() => {});
-      dashboardService.getOverdueTasks(caregiverId).then((t) => setOverdueCount(t.length)).catch(() => {});
+      toast.success(confirmMode === "undo" ? t("dashboard.taskIncomplete") : t("dashboard.taskComplete"));
+      dashboardService.getPendingTasks(caregiverId).then((tasks) => setPendingCount(tasks.length)).catch(() => {});
+      dashboardService.getOverdueTasks(caregiverId).then((tasks) => setOverdueCount(tasks.length)).catch(() => {});
     } catch (err) {
       setCompletionKeys(snapshot);
-      toast.error(err instanceof Error ? err.message : "Could not save completion");
+      toast.error(err instanceof Error ? err.message : t("dashboard.couldNotSave"));
     } finally {
       setIsConfirming(false);
     }
@@ -1364,11 +1317,11 @@ export function DashboardPage() {
       }
       dashboardService.getPendingTasks(caregiverId).then((t) => setPendingCount(t.length)).catch(() => {});
       dashboardService.getOverdueTasks(caregiverId).then((t) => setOverdueCount(t.length)).catch(() => {});
-      toast.success("Medication administration confirmed!");
+      toast.success(t("dashboard.medConfirmed"));
       dismissAlert();
     } catch {
       setCompletionKeys(snapshot);
-      toast.error("Could not confirm. Please try again.");
+      toast.error(t("dashboard.couldNotConfirm"));
     } finally {
       setIsAlertConfirming(false);
     }
@@ -1406,9 +1359,9 @@ export function DashboardPage() {
         );
         if (ev) deleteEvent(ev.id);
       }
-      toast.success("Event deleted");
+      toast.success(t("dashboard.eventDeleted"));
     } catch {
-      toast.error("Could not delete event");
+      toast.error(t("dashboard.eventDeleteFailed"));
     } finally {
       setDeletingKeys((prev) => { const s = new Set(prev); s.delete(item.rowKey); return s; });
     }
@@ -1421,21 +1374,76 @@ export function DashboardPage() {
   return (
     <div className="space-y-5">
 
+      {/* ── BPT Banner ───────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showBptBanner && (
+          <motion.div
+            key="bpt-banner"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            className="relative flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 bg-gradient-to-r from-blue-300 to-indigo-200 border border-blue-200 rounded-[20px] px-5 py-4 shadow-[0_8px_24px_-10px_rgba(99,102,241,0.18)]"
+          >
+            <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0 pr-8 sm:pr-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-200 flex items-center justify-center shrink-0">
+                <Banknote className="w-5 h-5 text-blue-700" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-blue-900 font-extrabold text-sm leading-snug">{t("bptBanner.title")}</p>
+                <p className="hidden sm:block text-blue-700 text-xs font-medium mt-0.5 leading-snug">{t("bptBanner.desc")}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleDismissBptBanner}
+              aria-label={t("bptBanner.dismiss")}
+              className="absolute top-4 right-4 sm:static sm:order-last w-7 h-7 rounded-lg bg-blue-200 hover:bg-blue-300 flex items-center justify-center transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5 text-blue-700" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/knowledge-hub#bpt-allowance")}
+              className="sm:hidden w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              {t("bptBanner.cta")}
+            </button>
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => navigate("/knowledge-hub#bpt-allowance")}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {t("bptBanner.cta")}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Hero ─────────────────────────────────────────────────────────────── */}
       <HeroSection navigate={navigate} />
 
       {/* ── Layout grid ───────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-12 gap-3 sm:gap-5">
 
         {/* Row 1 - Quick Actions (8) + Meal Schedule (4) */}
         <div className="col-span-12 lg:col-span-8 h-full">
           <QuickActionsGrid navigate={navigate} />
         </div>
         <div className="col-span-12 lg:col-span-4 h-full">
-          <MealPlannerSidebar caregiverId={caregiverId} onSaved={refreshAgenda} />
+          <StepsToTakeNext
+            mealConfigured={dashMealSchedules.length > 0}
+            hasMedications={patientMedications.length > 0}
+            hasEvents={patientEventsStore.length > 0}
+            navigate={navigate}
+          />
         </div>
 
-        {/* Row 2 - Care Calendar (full width) */}
+        {/* Row 2 - Calendar (full width) */}
         <div className="col-span-12">
           <CareCalendarSection
             selectedDate={selectedDate}
@@ -1455,7 +1463,7 @@ export function DashboardPage() {
         <div className="col-span-12">
           <DayTimeline
             schedule={caregiverSchedule}
-            isLoading={isCompletionsLoading}
+            isLoading={isScheduleLoading}
             selectedDate={selectedDate}
             todayStr={todayStr}
             pendingCount={pendingCount}
@@ -1480,7 +1488,7 @@ export function DashboardPage() {
               onClick={handleCancelComplete}
               className="fixed inset-0 bg-black/50 backdrop-blur-md z-50"
             />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 p-safe pointer-events-none">
               <motion.div
                 initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.9, y: 24 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1497,7 +1505,7 @@ export function DashboardPage() {
                           : <CheckCircle2 className="w-5 h-5 text-white" />}
                       </div>
                       <h3 className="text-lg font-bold text-[#1F2247]">
-                        {confirmMode === "undo" ? "Undo Task?" : "Complete Task?"}
+                        {confirmMode === "undo" ? t("dashboard.undoTask") : t("dashboard.completeTask")}
                       </h3>
                     </div>
                     <button
@@ -1514,7 +1522,7 @@ export function DashboardPage() {
                     </div>
                   )}
                   <p className="text-sm text-[#A3AED0] font-medium mb-5">
-                    {confirmMode === "undo" ? "Mark this task as incomplete again?" : "Mark this task as complete?"}
+                    {confirmMode === "undo" ? t("dashboard.markIncomplete") : t("dashboard.markComplete")}
                   </p>
                   <div className="flex gap-3">
                     <button
@@ -1523,7 +1531,7 @@ export function DashboardPage() {
                       disabled={isConfirming}
                       className="flex-1 py-3 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-70 cursor-pointer"
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </button>
                     <button
                       type="button"
@@ -1532,7 +1540,7 @@ export function DashboardPage() {
                       className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
                     >
                       {isConfirming && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {isConfirming ? "Saving…" : confirmMode === "undo" ? "Yes, Undo" : "Yes, Complete"}
+                      {isConfirming ? t("dashboard.saving") : confirmMode === "undo" ? t("dashboard.yesUndo") : t("dashboard.yesComplete")}
                     </button>
                   </div>
                 </div>
@@ -1561,7 +1569,7 @@ export function DashboardPage() {
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/65 backdrop-blur-md z-[9999]"
             />
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 p-safe pointer-events-none">
               <motion.div
                 initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.88, y: 32 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1584,16 +1592,16 @@ export function DashboardPage() {
                       <Bell className="w-7 h-7 text-white" />
                     </motion.div>
                     <div>
-                      <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-0.5">Medication Alert</p>
+                      <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-0.5">{t("dashboard.medicationAlert")}</p>
                       <p className="text-xl font-bold text-white">{pendingAlert.title}</p>
                     </div>
                   </div>
                   <div className="px-6 sm:px-8 py-5 sm:py-6">
-                    <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2">Time to administer:</p>
+                    <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2">{t("dashboard.timeToAdminister")}</p>
                     <div className="p-4 bg-[#F8F7FF] rounded-xl border border-[#E9E3FF]/50 mb-4">
                       <p className="text-[#1F2247] font-bold text-base leading-relaxed">{pendingAlert.body}</p>
                     </div>
-                    <p className="text-sm text-[#A3AED0] font-medium">Please confirm or snooze to continue.</p>
+                    <p className="text-sm text-[#A3AED0] font-medium">{t("dashboard.confirmOrSnooze")}</p>
                   </div>
                   <div className="px-6 sm:px-8 pb-6 sm:pb-8 flex gap-3 sm:gap-4">
                     <button
@@ -1602,7 +1610,7 @@ export function DashboardPage() {
                       disabled={isAlertConfirming}
                       className="flex-1 py-4 px-6 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      Snooze 5 min
+                      {t("dashboard.snooze")}
                     </button>
                     <button
                       type="button"
@@ -1611,7 +1619,7 @@ export function DashboardPage() {
                       className="flex-1 py-4 px-6 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                     >
                       {isAlertConfirming && <Loader2 className="w-5 h-5 animate-spin" />}
-                      {isAlertConfirming ? "Confirming…" : "Confirm"}
+                      {isAlertConfirming ? t("dashboard.confirming") : t("dashboard.confirm")}
                     </button>
                   </div>
                 </div>

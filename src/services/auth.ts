@@ -12,6 +12,7 @@ export interface LoginResponse {
   nickname: string;
   uniqueId: string;
   message: string;
+  language: string;
 }
 
 export const authService = {

@@ -3,15 +3,19 @@ import api from "@/lib/api";
 // --- Medication types ---
 export interface MedicationPlan {
   remindId: number;
-  planId: number;           // groups all reminders that belong to the same medication plan
-  patientId: number;
+  planId?: number;          // groups all reminders that belong to the same medication plan
+  patientId?: number;
   drugId: number;
   dosage: string;
   frequency: string;
-  adminTimes: string;
-  adminTime: string;        // this reminder's specific administration time (HH:MM:SS)
-  remindTime: string;
-  startDate: string;
+  adminTimes?: string;
+  adminTime?: string;         // legacy / alternate field names
+  remindTime?: string;
+  /** API MedicationPlanResponse uses `date` for plan start */
+  date?: string;
+  /** API MedicationPlanResponse uses `time` for admin time */
+  time?: string;
+  startDate?: string;
   planNote: string;
   mealTiming: string | null;
   quantity: number | null;
@@ -101,6 +105,7 @@ export const careEventsService = {
     startDate: string,
     planNote: string,
     mealTiming: string | null,
+    anchoredMeals: string | null,
     quantity: number | null,
     intakeMethod: string | null,
     endDate: string | null,
@@ -116,6 +121,7 @@ export const careEventsService = {
       startDate,
       planNote,
       mealTiming,
+      anchoredMeals,
       quantity,
       intakeMethod,
       endDate,

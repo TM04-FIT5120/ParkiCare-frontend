@@ -1,9 +1,34 @@
 import axios from "axios";
 
 const api = axios.create({
-  // baseURL: "http://localhost:8080/api",
-  baseURL: "https://futurestack.webhop.me/api",
+  baseURL: "http://localhost:8080/api",
+  // baseURL: "https://futurestack.webhop.me/api",
   headers: { "Content-Type": "application/json" },
+});
+
+const LANG_STORAGE_KEY = "parkicare_lang";
+const SUPPORTED_API_LANGS = new Set(["en", "zh-CN", "ms-MY"]);
+
+function readInitialApiLanguage(): string {
+  try {
+    const stored = localStorage.getItem(LANG_STORAGE_KEY);
+    if (stored && SUPPORTED_API_LANGS.has(stored)) return stored;
+  } catch {
+    // private mode / SSR
+  }
+  return "en";
+}
+
+/** Synced with LanguageContext; initialized from localStorage before first request. */
+let _currentLanguage = readInitialApiLanguage();
+
+export function setApiLanguage(lang: string) {
+  _currentLanguage = lang;
+}
+
+api.interceptors.request.use((config) => {
+  config.headers["Accept-Language"] = _currentLanguage;
+  return config;
 });
 
 api.interceptors.response.use(
@@ -11,7 +36,7 @@ api.interceptors.response.use(
   (error) => {
     const data = error.response?.data;
     const message =
-      (typeof data === "string" ? data : data?.message) ||
+      (typeof data === "string" ? data : data?.error ?? data?.message) ||
       error.message ||
       "An unexpected error occurred";
     return Promise.reject(new Error(String(message)));

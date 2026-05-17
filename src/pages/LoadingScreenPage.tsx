@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 
 export function LoadingScreenPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export function LoadingScreenPage() {
         <div className="w-full relative space-y-2">
           <div className="flex justify-between items-end mb-2">
             <span className="text-sm font-semibold tracking-[0.2em] text-[#8e9d90] uppercase">
-              Ready
+              {t("loadingScreen.ready")}
             </span>
             <span className="text-3xl font-bold text-[#4c8466]">
               {progress}%
@@ -77,7 +79,7 @@ export function LoadingScreenPage() {
 
           <div className="mt-8 text-center w-full flex justify-center pt-8">
             <span className="text-sm font-medium tracking-[0.15em] text-[#a0afb5] uppercase">
-              FIT5120 TEAM TM04 | FutureStack
+              {t("loadingScreen.teamLabel")}
             </span>
           </div>
         </div>
