@@ -47,6 +47,12 @@
   "login": {
     "platform": "Platform ParkiCare",
     "tagline": "Memperkasakan penjagaan yang lebih baik untuk orang tersayang.",
+    "taglinePrefix": "Menyokong penjagaan harian yang lebih baik untuk",
+    "taglineAccent": "Parkinson's.",
+    "feat1": "Urus\nJadual",
+    "feat2": "Susun\nRekod",
+    "feat3": "Jejak\nMakanan",
+    "feat4": "Penjagaan Harian\nDipermudahkan",
     "description": "Log masuk dengan ID Pengguna unik anda untuk mengurus rekod pesakit, memantau tanda vital, dan menyelaraskan jadual dengan selamat.",
     "title": "Selamat kembali",
     "subtitle": "Sila masukkan ID Pengguna dan kata laluan anda untuk log masuk.",

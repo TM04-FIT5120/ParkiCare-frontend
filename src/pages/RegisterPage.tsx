@@ -85,7 +85,7 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans relative pt-safe pb-safe">
+    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f1f4fa] text-slate-800 font-sans relative pt-safe pb-safe">
       <div 
         className="flex-1 w-full flex relative flex-row-reverse"
         onMouseMove={handleMouseMove}
@@ -102,37 +102,43 @@ export function RegisterPage() {
           className="absolute bottom-[-10%] left-[20%] w-[min(30rem,70vw)] h-[min(30rem,70vw)] rounded-full bg-blue-200/50 blur-[100px] pointer-events-none z-0"
         />
 
-        {/* Right side Image with Parallax (Mirrored from Login) */}
-        <div className="hidden lg:flex w-[55%] relative overflow-hidden bg-slate-900 shadow-[-20px_0_40px_rgba(0,0,0,0.1)] z-10 rounded-l-[3rem] items-end justify-start p-16">
-          <motion.img
-            src="https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&q=80&w=1080"
-            alt="Caregiver and patient"
-            className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
-            style={{
-              x: useMotionTemplate`calc(-5% + ${mouseX}px)`,
-              y: useMotionTemplate`calc(-5% + ${mouseY}px)`,
-              scale: 1.1,
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/40 to-transparent" />
-          
-          <motion.div 
-            className="relative z-20 text-white max-w-xl"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 1, delay: 0.5 }}
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-              <span className="text-xs font-medium tracking-wide">{t("register.joinCommunity")}</span>
-            </div>
-            <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-200">
-              {t("register.tagline")}
-            </h1>
-            <p className="text-lg text-slate-300 font-light max-w-md">
-              {t("register.description")}
-            </p>
-          </motion.div>
+        {/* Right side Image Panel (Redesigned) */}
+        <div className="hidden lg:flex w-[55%] p-7 relative z-10">
+          <div className="relative overflow-hidden rounded-[2rem] bg-[#0f172a] shadow-[0_30px_80px_-20px_rgba(15,23,42,0.45)] w-full">
+            <motion.img
+              src="/auth-signup-photo.png"
+              alt="Doctor caring for an elderly patient"
+              className="absolute inset-0 w-full h-full object-cover object-top"
+              style={{
+                x: useMotionTemplate`calc(-5% + ${mouseX}px)`,
+                y: useMotionTemplate`calc(-5% + ${mouseY}px)`,
+                scale: 1.05,
+              }}
+            />
+            {/* Gradient overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0b1a3a] via-[#0b1a3a]/85 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-l from-[#0b1a3a]/35 to-transparent" />
+
+            <motion.div
+              className="relative z-10 h-full w-full flex flex-col justify-end p-14 text-white"
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 1, delay: 0.5 }}
+            >
+              <div>
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] font-semibold tracking-widest uppercase text-white/90">
+                  <span className="w-2 h-2 rounded-full bg-[#A8B6FF] animate-pulse" />
+                  {t("register.joinCommunity")}
+                </span>
+              </div>
+              <h1 className="text-[clamp(2.4rem,3.4vw,3.25rem)] font-bold leading-[1.05] tracking-tight mt-6 text-white max-w-[20ch]">
+                {t("register.tagline")}
+              </h1>
+              <p className="text-[15.5px] leading-relaxed text-slate-200/85 font-light max-w-[46ch] mt-5">
+                {t("register.description")}
+              </p>
+            </motion.div>
+          </div>
         </div>
 
         {/* Left side Form (Transparent & Animated) */}
