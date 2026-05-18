@@ -1344,7 +1344,7 @@ export function CareEventsPage() {
           expanded.push({
             ...e,
             startDatetime: `${cursorStr}T${startTimeStr}`,
-            endDatetime: endTimeStr ? `${cursorStr}T${endTimeStr}` : undefined,
+            endDatetime: endTimeStr ? `${cursorStr}T${endTimeStr}` : "",
           });
         }
         cursor.setDate(cursor.getDate() + 1);
