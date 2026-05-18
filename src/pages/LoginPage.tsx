@@ -96,7 +96,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f8fafc] text-slate-800 font-sans relative pt-safe pb-safe">
+    <div className="min-h-screen-dvh w-full flex flex-col bg-[#f1f4fa] text-slate-800 font-sans relative pt-safe pb-safe">
       <div 
         className="flex-1 w-full flex relative"
         onMouseMove={handleMouseMove}
@@ -113,37 +113,72 @@ export function LoginPage() {
           className="absolute bottom-[-10%] right-[20%] w-[min(30rem,70vw)] h-[min(30rem,70vw)] rounded-full bg-indigo-200/50 blur-[100px] pointer-events-none z-0"
         />
 
-        {/* Left side Image with Parallax */}
-        <div className="hidden lg:flex w-[55%] relative overflow-hidden bg-slate-900 shadow-2xl z-10 rounded-r-[3rem] items-end justify-start p-16">
-          <motion.img
-            src="https://images.unsplash.com/photo-1693821193140-7db5779d47ed?auto=format&fit=crop&q=80&w=1080"
-            alt="Elderly care"
-            className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
-            style={{
-              x: useMotionTemplate`calc(-5% + ${mouseX}px)`,
-              y: useMotionTemplate`calc(-5% + ${mouseY}px)`,
-              scale: 1.1,
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/40 to-transparent" />
-          
-          <motion.div 
-            className="relative z-20 text-white max-w-xl"
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 1, delay: 0.5 }}
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span className="text-xs font-medium tracking-wide">{t("login.platform")}</span>
-            </div>
-            <h1 className="text-5xl font-bold tracking-tight mb-6 leading-[1.1] text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
-              {t("login.tagline")}
-            </h1>
-            <p className="text-lg text-slate-300 font-light max-w-md">
-              {t("login.description")}
-            </p>
-          </motion.div>
+        {/* Left side Image Panel (Redesigned) */}
+        <div className="hidden lg:flex w-[55%] p-7 relative z-10">
+          <div className="relative overflow-hidden rounded-[2rem] bg-[#0f172a] shadow-[0_30px_80px_-20px_rgba(15,23,42,0.45)] w-full">
+            <motion.img
+              src="/auth-login-photo.png"
+              alt="Caregiver supporting an elderly woman"
+              className="absolute inset-0 w-full h-full object-cover object-top"
+              style={{
+                x: useMotionTemplate`calc(-5% + ${mouseX}px)`,
+                y: useMotionTemplate`calc(-5% + ${mouseY}px)`,
+                scale: 1.05,
+              }}
+            />
+            {/* Gradient overlays */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0b1a3a] via-[#0b1a3a]/85 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0b1a3a]/35 to-transparent" />
+
+            <motion.div
+              className="relative z-10 h-full w-full flex flex-col justify-end p-14 text-white"
+              initial={{ opacity: 0, x: -40 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 1, delay: 0.5 }}
+            >
+              <div>
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] font-semibold tracking-widest uppercase text-white/90">
+                  <span className="w-2 h-2 rounded-full bg-[#9DB8FF] animate-pulse" />
+                  {t("login.platform")}
+                </span>
+              </div>
+              <h1 className="text-[clamp(2.4rem,3.4vw,3.25rem)] font-bold leading-[1.05] tracking-tight mt-6 text-white max-w-[20ch]">
+                {t("login.taglinePrefix")} <span className="text-[#9DB8FF]">{t("login.taglineAccent")}</span>
+              </h1>
+              <p className="text-[15.5px] leading-relaxed text-slate-200/85 font-light max-w-[46ch] mt-5">
+                {t("login.description")}
+              </p>
+
+              {/* Feature columns */}
+              <div className="border-t border-white/10 grid grid-cols-4 mt-9 pt-6 gap-0">
+                {[
+                  {
+                    label: t("login.feat1"),
+                    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+                  },
+                  {
+                    label: t("login.feat2"),
+                    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>,
+                  },
+                  {
+                    label: t("login.feat3"),
+                    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11h18a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8z"/><path d="M7 11V8a2 2 0 0 1 2-2"/><path d="M15 6a3 3 0 0 1 3 3v2"/><path d="M2 21h20"/></svg>,
+                  },
+                  {
+                    label: t("login.feat4"),
+                    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/><path d="m12 5 1.5 1.5"/></svg>,
+                  },
+                ].map((feat, i) => (
+                  <div key={i} className={`flex flex-col gap-3 ${i > 0 ? "pl-5 border-l border-white/12" : ""}`}>
+                    <div className="w-10 h-10 rounded-xl bg-white/8 border border-white/12 text-[#C9D7FF] backdrop-blur-md flex items-center justify-center">
+                      {feat.icon}
+                    </div>
+                    <span className="text-[13px] leading-snug text-white/90 font-medium whitespace-pre-line">{feat.label}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         </div>
 
         {/* Right side Form (Transparent & Animated) */}

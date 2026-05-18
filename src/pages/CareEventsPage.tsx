@@ -14,7 +14,7 @@ import { caregiverScheduleService } from "@/services/caregiverSchedule";
 import { scanMedicineLabel } from "@/services/ocr";
 // import { HistorySection } from "@/components/HistorySection";
 // import type { CareEvent } from "@/context/careEventsContext";
-import { getMYTDateString } from "@/lib/eventRecurrence";
+import { getMYTDateString, isEventOnDay } from "@/lib/eventRecurrence";
 import { translateEnum } from "@/lib/translateEnum";
 import { getMealSchedules, updateMealTime, type MealScheduleEntry } from "@/services/mealSchedule";
 import { activityService, type WeatherData, type ActivitySuggestion } from "@/services/activityRecommendations";
@@ -1249,6 +1249,7 @@ export function CareEventsPage() {
           prev?.filter(s => !(s.eventName === suggestion.eventName && s.startTime === suggestion.startTime)) ?? null,
         );
         if (feedback === "accept") {
+          localStorage.setItem(`parkicare_ai_activity_added_${caregiverId}`, "true");
           await refresh();
         }
         toast.success(feedback === "accept" ? t("careEvents.aiSuggestions.activityAdded") : t("careEvents.aiSuggestions.suggestionDismissed"));
@@ -1295,17 +1296,63 @@ export function CareEventsPage() {
   const filteredCombinedEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    // Use local date parts to avoid UTC-offset shifting (toISOString gives UTC date, not MYT)
+    const toLocalDateStr = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const todayStr = toLocalDateStr(today);
+
+    // End of current week = this Sunday (0 extra days if today is already Sunday)
+    const daysToSunday = (7 - today.getDay()) % 7;
+    const endOfWeek = new Date(today);
+    endOfWeek.setDate(today.getDate() + daysToSunday);
+    const endOfWeekStr = toLocalDateStr(endOfWeek);
+
     const sevenDaysLater = new Date(today);
     sevenDaysLater.setDate(today.getDate() + 7);
 
-    return combinedEvents
-      .filter(e => {
-        // Drop past events (keep those with no datetime info)
-        if (e.startDatetime) {
-          const evDate = new Date(e.startDatetime);
-          evDate.setHours(0, 0, 0, 0);
-          if (evDate < today) return false;
+    // Expand recurring events into individual occurrences within the week window.
+    const expanded: typeof combinedEvents = [];
+    for (const e of combinedEvents) {
+      const rec = (e.recurrence ?? "none").toLowerCase();
+
+      if (!e.startDatetime) {
+        expanded.push(e);
+        continue;
+      }
+
+      const startDateStr = e.startDatetime.slice(0, 10);
+      const startTimeStr = e.startDatetime.slice(11); // "HH:mm:ss"
+      const endDateStr = e.endDatetime ? e.endDatetime.slice(0, 10) : undefined;
+      const endTimeStr = e.endDatetime ? e.endDatetime.slice(11) : undefined;
+      // Series end date: only set when endDate is strictly after startDate
+      const seriesEnd = endDateStr && endDateStr > startDateStr ? endDateStr : undefined;
+
+      if (!rec || rec === "none") {
+        // Non-recurring: keep only if on or after today
+        if (startDateStr >= todayStr) expanded.push(e);
+        continue;
+      }
+
+      // Recurring: generate one occurrence per matching day from today to end-of-week
+      // (capped by the series end date when it falls before end-of-week)
+      const windowEnd = seriesEnd && seriesEnd < endOfWeekStr ? seriesEnd : endOfWeekStr;
+      const cursor = new Date(today);
+      while (true) {
+        const cursorStr = toLocalDateStr(cursor);
+        if (cursorStr > windowEnd) break;
+        if (isEventOnDay(cursorStr, startDateStr, seriesEnd, rec)) {
+          expanded.push({
+            ...e,
+            startDatetime: `${cursorStr}T${startTimeStr}`,
+            endDatetime: endTimeStr ? `${cursorStr}T${endTimeStr}` : undefined,
+          });
         }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+
+    return expanded
+      .filter(e => {
         const isMeal = e.eventKind === "caregiver" && MEAL_TITLES.includes(e.title);
         if (isMeal && hideMealEvents) return false;
         if (isMeal && e.startDatetime) {
@@ -2463,7 +2510,7 @@ export function CareEventsPage() {
               {careEventsLoading ? (
                 <ListSkeleton rows={4} />
               ) : (() => {
-                const todayStr = new Date().toISOString().slice(0, 10);
+                const todayStr = getMYTDateString();
                 const q = medSearch.trim().toLowerCase();
                 const filtered = [...meds]
                   .filter(m => !m.endDate || m.endDate >= todayStr)
@@ -3394,7 +3441,7 @@ export function CareEventsPage() {
                   <p className="text-[13px] font-bold text-[#A3AED0]">{t("careEvents.noEventsScheduled")}</p>
                 </div>
               ) : (() => {
-                const todayStr = new Date().toISOString().slice(0, 10);
+                const todayStr = getMYTDateString();
                 const EVENT_META = {
                   caregiver: { color: "#4318FF", bg: "#EDE9FE", label: t("careEvents.filterCaregiver") },
                   care:      { color: "#F59E0B", bg: "#FEF3C7", label: t("careEvents.filterPatientCare") },

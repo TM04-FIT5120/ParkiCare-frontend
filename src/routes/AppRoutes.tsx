@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { CareEventsPage } from "@/pages/CareEventsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { DigitalRecordsPage } from "@/pages/DigitalRecordsPage";
-import { GuidePage } from "@/pages/GuidePage";
+// import { GuidePage } from "@/pages/GuidePage";
 import { LoadingScreenPage } from "@/pages/LoadingScreenPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NutritionLibraryPage } from "@/pages/NutritionLibraryPage";
@@ -22,7 +22,7 @@ export const AppRoutes = () => (
     <Route path="/profile" element={<ProfilePage />} />
     <Route element={<AppLayout />}>
       <Route path="/home" element={<DashboardPage />} />
-      <Route path="/guide" element={<GuidePage />} />
+      {/* <Route path="/guide" element={<GuidePage />} /> */}
       <Route path="/knowledge-hub" element={<PerkinsDetailsPage />} />
       <Route path="/care-events" element={<CareEventsPage />} />
       <Route path="/digital-records" element={<DigitalRecordsPage />} />

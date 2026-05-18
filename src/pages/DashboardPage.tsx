@@ -932,11 +932,13 @@ function QuickActionsGrid({ navigate }: { navigate: (path: string) => void }) {
 function StepsToTakeNext({
   mealConfigured,
   hasMedications,
+  hasAIActivities,
   hasEvents,
   navigate,
 }: {
   mealConfigured: boolean;
   hasMedications: boolean;
+  hasAIActivities: boolean;
   hasEvents: boolean;
   navigate: (path: string) => void;
 }) {
@@ -962,7 +964,7 @@ function StepsToTakeNext({
       icon: Coffee,
       title: t("dashboard.stepAITitle"),
       desc: t("dashboard.stepAIDesc"),
-      done: false,
+      done: hasAIActivities,
       href: "/care-events#environment-section",
     },
     {
@@ -1438,6 +1440,7 @@ export function DashboardPage() {
           <StepsToTakeNext
             mealConfigured={dashMealSchedules.length > 0}
             hasMedications={patientMedications.length > 0}
+            hasAIActivities={localStorage.getItem(`parkicare_ai_activity_added_${caregiverId}`) === "true"}
             hasEvents={patientEventsStore.length > 0}
             navigate={navigate}
           />

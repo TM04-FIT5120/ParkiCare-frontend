@@ -46,7 +46,7 @@ export const AppLayout = () => {
 
   const navLinks = [
     { name: t("nav.home"), path: "/home" },
-    { name: t("nav.guide"), path: "/guide" },
+    // { name: t("nav.guide"), path: "/guide" },
     { name: t("nav.knowledgeHub"), path: "/knowledge-hub" },
     { name: t("nav.careEvents"), path: "/care-events" },
     { name: t("nav.digitalRecords"), path: "/digital-records" },

@@ -47,6 +47,12 @@
   "login": {
     "platform": "ParkiCare Platform",
     "tagline": "Empowering better care for our loved ones.",
+    "taglinePrefix": "Supporting better daily care for",
+    "taglineAccent": "Parkinson's.",
+    "feat1": "Manage\nSchedules",
+    "feat2": "Organize\nRecords",
+    "feat3": "Track\nMeals",
+    "feat4": "Daily Care\nMade Easy",
     "description": "Log in with your unique User ID to securely manage patient records, track vitals, and coordinate schedules.",
     "title": "Welcome back",
     "subtitle": "Please enter your User ID and password to sign in.",

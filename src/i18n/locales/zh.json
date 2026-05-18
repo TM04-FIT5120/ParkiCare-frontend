@@ -47,6 +47,12 @@
   "login": {
     "platform": "ParkiCare 平台",
     "tagline": "为我们所爱的人提供更好的护理。",
+    "taglinePrefix": "为帕金森症患者提供更好的",
+    "taglineAccent": "日常护理支持。",
+    "feat1": "管理\n日程安排",
+    "feat2": "整理\n健康记录",
+    "feat3": "追踪\n饮食营养",
+    "feat4": "日常护理\n轻松管理",
     "description": "使用您的唯一用户ID登录，安全管理患者记录、追踪生命体征并协调日程安排。",
     "title": "欢迎回来",
     "subtitle": "请输入您的用户ID和密码以登录。",
