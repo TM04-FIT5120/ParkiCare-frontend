@@ -228,6 +228,9 @@
     "noCareEvents": "Tiada acara penjagaan ditambah lagi.",
     "noOutdoorEvents": "Tiada acara luar ditambah lagi.",
     "selectMedFromSearch": "Sila pilih ubat daripada hasil carian",
+    "drugPicker": {
+      "selectFromDropdown": "Tiada padanan tepat — kemungkinan padanan ditunjukkan di bawah. Sila pilih satu."
+    },
     "noPatientProfile": "Profil pesakit tidak dijumpai. Sila lengkapkan persediaan pesakit terlebih dahulu.",
     "testMedScheduled": "Ubat ujian dijadualkan!",
     "enterMedName": "Sila masukkan nama ubat",

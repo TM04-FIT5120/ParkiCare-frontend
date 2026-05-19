@@ -228,6 +228,9 @@
     "noCareEvents": "尚未添加护理事件。",
     "noOutdoorEvents": "尚未添加户外事件。",
     "selectMedFromSearch": "请从搜索结果中选择药物",
+    "drugPicker": {
+      "selectFromDropdown": "未找到完全匹配项 — 可能的匹配项显示在下方。请选择一项。"
+    },
     "noPatientProfile": "未找到患者档案。请先完成患者设置。",
     "testMedScheduled": "测试药物已安排！",
     "enterMedName": "请输入药物名称",
