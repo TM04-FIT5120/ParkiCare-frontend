@@ -228,6 +228,9 @@
     "noCareEvents": "No care events added yet.",
     "noOutdoorEvents": "No outdoor events added yet.",
     "selectMedFromSearch": "Please select a medication from the search results",
+    "drugPicker": {
+      "selectFromDropdown": "No exact match found — possible matches shown below. Please select one."
+    },
     "noPatientProfile": "No patient profile found. Please set up a patient first.",
     "testMedScheduled": "Test medication scheduled!",
     "enterMedName": "Please enter medication name",

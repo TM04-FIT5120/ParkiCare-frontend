@@ -159,6 +159,47 @@ async function resolveDrugForSave(
   }
 }
 
+/** Score similarity between two drug name strings.
+ *  Exact word match = 2pts, substring match (≥4 chars) = 1pt. */
+function scoreWordOverlap(a: string, b: string): number {
+  const tokenize = (s: string) => s.toLowerCase().split(/[\s\-\/,.()+]+/).filter(w => w.length > 1);
+  const wordsA = tokenize(a);
+  const wordsB = tokenize(b);
+  let score = 0;
+  for (const wa of wordsA) {
+    for (const wb of wordsB) {
+      if (wa === wb) { score += 2; break; }
+      if (wa.length >= 4 && wb.length >= 4 && (wb.includes(wa) || wa.includes(wb))) { score += 1; break; }
+    }
+  }
+  return score;
+}
+
+/** Search the drug catalog and return candidates ranked by word-overlap with medName.
+ *  Searches with the full name AND each significant token so partial OCR names still find matches. */
+async function findDrugCandidates(medName: string, cachedResults: DrugBase[]): Promise<DrugBase[]> {
+  const seen = new Set<number>();
+  const pool: DrugBase[] = [];
+  const add = (drugs: DrugBase[]) => {
+    for (const d of drugs) if (!seen.has(d.drugId)) { pool.push(d); seen.add(d.drugId); }
+  };
+
+  add(cachedResults);
+  try { add(await drugsService.searchDrugs(medName.trim())); } catch { /* ignore */ }
+
+  // Also search individual tokens — handles cases where the full OCR string returns nothing
+  const tokens = medName.trim().split(/[\s\-\/,.()+]+/).filter(w => w.length >= 4);
+  for (const token of tokens) {
+    try { add(await drugsService.searchDrugs(token)); } catch { /* ignore */ }
+  }
+
+  return pool
+    .map(d => ({ drug: d, score: scoreWordOverlap(medName, d.drugName) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ drug }) => drug);
+}
+
 type EnvTone = "danger" | "warn" | "info" | "good";
 const ENV_NOTE_STYLE: Record<EnvTone, { bg: string; text: string; icon: string; msgKey: string }> = {
   danger: { bg: "bg-rose-50/80 border-rose-200",       text: "text-rose-900",     icon: "text-red-600",      msgKey: "careEvents.environment.noteDanger" },
@@ -214,7 +255,7 @@ function getSuggestionTags(
   return tags;
 }
 
-// â”€â”€â”€ Meal planner types & helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Meal planner types & helpers --------------------------------------------
 
 type MealRow = {
   mealType: string;
@@ -640,7 +681,7 @@ export function CareEventsPage() {
     setOrderedMealsForTimes(orderedMeals);
   }, [selectedMeals, mealSchedules, mealTiming, drugIntervalMinutes]);
 
-  // â”€â”€ Meal planner edit handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Meal planner edit handlers -----------------------------------------------
   function startMealEdit(mealType: string) {
     setMealEditRows(prev => prev.map(r => r.mealType === mealType ? { ...r, editing: true } : r));
   }
@@ -747,10 +788,6 @@ export function CareEventsPage() {
 
   const handleTestSaveMedication = async (e: React.SyntheticEvent) => {
     e.preventDefault();
-    if (!testSelectedDrug) {
-      toast.error(t("careEvents.selectMedFromSearch"));
-      return;
-    }
     const adminTimesArr = testMedTimes.map(t => to24h(t.hour, t.minute, t.period));
     const adminTimesStr = adminTimesArr.join(",");
     const remindTime = adminTimesArr[0];
@@ -761,13 +798,16 @@ export function CareEventsPage() {
         toast.error(t("careEvents.noPatientProfile"));
         return;
       }
-      const drug = await resolveDrugForSave(
-        testMedName,
-        testSelectedDrug,
-        testDrugSearchResults,
-      );
+      const drug = await resolveDrugForSave(testMedName, testSelectedDrug, testDrugSearchResults);
       if (!drug) {
-        toast.error(t("careEvents.selectMedFromSearch"));
+        const candidates = await findDrugCandidates(testMedName, testDrugSearchResults);
+        if (candidates.length === 0) {
+          toast.error(t("careEvents.selectMedFromSearch"));
+          return;
+        }
+        setTestDrugSearchResults(candidates);
+        setTestShowMedsDropdown(true);
+        toast.info(t("careEvents.drugPicker.selectFromDropdown"));
         return;
       }
       await careEventsService.createMedication(
@@ -848,7 +888,16 @@ export function CareEventsPage() {
 
       const drug = await resolveDrugForSave(medName, selectedDrug, drugSearchResults);
       if (!drug) {
-        toast.error(t("careEvents.selectMedFromSearch"));
+        const candidates = await findDrugCandidates(medName, drugSearchResults);
+        if (candidates.length === 0) {
+          toast.error(t("careEvents.selectMedFromSearch"));
+          return;
+        }
+        setDrugSearchResults(candidates);
+        setShowMedsDropdown(true);
+        setShowConfirmModal(false);
+        setMedicationStep(1);
+        toast.info(t("careEvents.drugPicker.selectFromDropdown"));
         return;
       }
 
@@ -877,6 +926,7 @@ export function CareEventsPage() {
       setIsSavingMed(false);
     }
   };
+
 
   const handleNextStep = async () => {
     if (medicationStep === 1) {
@@ -1378,7 +1428,7 @@ export function CareEventsPage() {
 
       <div className="space-y-6 sm:space-y-8">
 
-        {/* â”€â”€ Meal Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* -- Meal Schedule ------------------------------------------------------- */}
         <div id="meal-schedule-section" className="bg-white rounded-[20px] p-5 sm:p-6 shadow-[0_18px_40px_rgba(112,144,176,0.12)] border border-[#EEEAFB]">
           <h2 className="text-xl font-bold text-[#2B3674] mb-4">{t("dashboard.mealScheduleTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2478,6 +2528,7 @@ export function CareEventsPage() {
             )}
           </AnimatePresence>
 
+
           {/* Right column wrapper */}
           <div className="h-full">
 
@@ -2637,7 +2688,7 @@ export function CareEventsPage() {
           onReuse={handleReuse}
         /> */}
 
-        {/* â”€â”€ NEW ROW: Location & Environment + AI Activity Suggestions â”€â”€ */}
+        {/* -- NEW ROW: Location & Environment + AI Activity Suggestions -- */}
         <div id="environment-section" className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch">
 
           {/* Location & Environment */}
@@ -2972,7 +3023,7 @@ export function CareEventsPage() {
 
             <div className="overflow-y-auto flex-1 min-h-0 px-1 pb-1">
 
-            {/* â”€â”€ Caregiver Event Form â”€â”€ */}
+            {/* -- Caregiver Event Form -- */}
             {activeEventTab === "caregiver" && (
               <form onSubmit={handleSaveCaregiverEvent} className="space-y-5">
                 <div>
@@ -3062,7 +3113,7 @@ export function CareEventsPage() {
               </form>
             )}
 
-            {/* â”€â”€ Care Event Form â”€â”€ */}
+            {/* -- Care Event Form -- */}
             {activeEventTab === "care" && (
               <form onSubmit={handleSaveCareEvent} className="space-y-5">
               <div className="relative z-10">
@@ -3283,7 +3334,7 @@ export function CareEventsPage() {
             </form>
             )}
 
-            {/* â”€â”€ Outdoor Event Form â”€â”€ */}
+            {/* -- Outdoor Event Form -- */}
             {activeEventTab === "outdoor" && (
               <form onSubmit={handleSaveOutdoorEvent} className="space-y-5">
                 <div className="relative z-10">
