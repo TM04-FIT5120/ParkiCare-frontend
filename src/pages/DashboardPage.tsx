@@ -643,7 +643,7 @@ function DayTimeline({
   isLoading,
   selectedDate,
   todayStr,
-  pendingCount,
+  // pendingCount,
   overdueCount,
   onTaskClick,
   onDelete,
