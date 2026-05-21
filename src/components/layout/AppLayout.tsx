@@ -11,6 +11,10 @@ import { Footer } from "@/components/layout/Footer";
 import { ScheduleOverlapAlertModal } from "@/components/ScheduleOverlapAlertModal";
 import { caregiverAlertsService, type CaregiverAlert } from "@/services/caregiverAlerts";
 
+// Module-level flag: persists across re-renders and re-mounts within the session.
+// Prevents the slide-in animation from replaying when language/auth context updates.
+let _navDidAnimate = false;
+
 const ScrollToTop = () => {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -71,9 +75,10 @@ export const AppLayout = () => {
       </div>
 
       {/* Top Navigation - Clean White, Soft Shadow */}
-      <motion.nav 
-        initial={{ y: -100 }}
+      <motion.nav
+        initial={_navDidAnimate ? false : { y: -100 }}
         animate={{ y: 0 }}
+        onAnimationComplete={() => { _navDidAnimate = true; }}
         transition={{ type: "spring" as const, stiffness: 200, damping: 20 }}
         className="sticky top-0 z-50 px-4 sm:px-6 pt-safe py-3 bg-white/95 sm:bg-white/90 sm:backdrop-blur-xl shadow-[0_4px_20px_rgba(112,144,176,0.08)] flex items-center justify-between gap-2"
       >
@@ -117,7 +122,7 @@ export const AppLayout = () => {
         
         <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
           {/* Language Switcher instead of Bell */}
-          <DropdownMenu.Root>
+          <DropdownMenu.Root modal={false}>
             <DropdownMenu.Trigger className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#F4F7FE] hover:bg-[#E9E3FF] rounded-full text-xs font-bold text-[#4318FF] transition-colors focus:outline-none">
               <Globe className="w-3.5 h-3.5 text-[#4318FF]" />
               {currentLangLabel}

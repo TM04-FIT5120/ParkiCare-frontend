@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ChefHat, Loader2, AlertTriangle, ChevronDown, ChevronUp, UtensilsCrossed, Utensils, Cookie, Coffee } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { recipeService, type GeneratedRecipe } from "@/services/recipe";
 import { useTranslation } from "react-i18next";
 import { getIntlLocale } from "@/lib/dateLocale";
@@ -227,6 +228,7 @@ function PastRecipeAccordion({ recipe }: { recipe: GeneratedRecipe }) {
 export function RecipesPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { currentLang } = useLanguage();
   const navigate = useNavigate();
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,7 +242,7 @@ export function RecipesPage() {
     recipeService.getRecipeHistory(user.caregiverId)
       .then(data => { setRecipes(data); setLoading(false); })
       .catch(() => { setError(t("recipes.failedLoad")); setLoading(false); });
-  }, [user]);
+  }, [user, currentLang]);
 
   // Group the most recent generation batch by createdAt minute (recipes generated
   // in the same call share the same timestamp within seconds).

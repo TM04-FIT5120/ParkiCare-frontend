@@ -13,19 +13,19 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login, setPatient } = useAuth();
   const { t } = useTranslation();
-  const [userId, setUserId] = useState(() => localStorage.getItem("parkicare_remembered_id") ?? "");
+  const [nickname, setNickname] = useState(() => localStorage.getItem("parkicare_remembered_nickname") ?? "");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem("parkicare_remembered_id"));
+  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem("parkicare_remembered_nickname"));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (rememberMe) {
-      localStorage.setItem("parkicare_remembered_id", userId);
+      localStorage.setItem("parkicare_remembered_nickname", nickname);
     } else {
-      localStorage.removeItem("parkicare_remembered_id");
+      localStorage.removeItem("parkicare_remembered_nickname");
     }
-  }, [rememberMe, userId]);
+  }, [rememberMe, nickname]);
 
   // Mouse parallax effect for the split screen background
   const mouseX = useMotionValue(0);
@@ -42,14 +42,14 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    if (!userId || !password) {
+    if (!nickname || !password) {
       setError(t("login.errorFillAll"));
       return;
     }
 
     setIsLoading(true);
     try {
-      const data = await authService.login(userId, password);
+      const data = await authService.login(nickname, password);
       login({ caregiverId: data.caregiverId, uniqueId: data.uniqueId, caregiverNickname: data.nickname, language: data.language });
 
       const patients = await patientService.getPatientsByCaregiver(data.caregiverId);
@@ -62,21 +62,8 @@ export function LoginPage() {
         toast.success(t("login.welcomeNewToast"));
         navigate("/patient-setup");
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed";
-      const isCredentialError =
-        message.includes("400") ||
-        message.includes("401") ||
-        message.toLowerCase().includes("invalid") ||
-        message.toLowerCase().includes("incorrect") ||
-        message.toLowerCase().includes("not found") ||
-        message.toLowerCase().includes("unauthorized") ||
-        message.toLowerCase().includes("wrong");
-      setError(
-        isCredentialError
-          ? t("login.errorCredentials")
-          : t("login.errorGeneral")
-      );
+    } catch {
+      setError(t("login.errorCredentials"));
     } finally {
       setIsLoading(false);
     }
@@ -216,8 +203,8 @@ export function LoginPage() {
                   </div>
                   <input
                     type="text"
-                    value={userId}
-                    onChange={(e) => { setUserId(e.target.value); setError(null); }}
+                    value={nickname}
+                    onChange={(e) => { setNickname(e.target.value); setError(null); }}
                     className={`w-full pl-11 pr-4 py-3.5 bg-white/50 backdrop-blur-md border rounded-2xl text-slate-900 outline-none transition-all placeholder:text-slate-500 text-sm font-medium shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] ${error ? "border-red-400 focus:ring-4 focus:ring-red-500/10 focus:border-red-500" : "border-white/60 focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500"}`}
                     placeholder={t("login.userIdPlaceholder")}
                     required
