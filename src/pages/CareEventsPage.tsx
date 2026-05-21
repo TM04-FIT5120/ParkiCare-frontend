@@ -1156,7 +1156,7 @@ export function CareEventsPage() {
     const startDatetime = `${careEventStartDate}T${time24}:00`;
     const endDateBase = (!careEventIsNeverEnding && careEventEndDate) ? careEventEndDate : careEventStartDate;
     const endDatetimeFinal = `${endDateBase}T${endTime24}:00`;
-    const displayTime = formatDisplayTime(careEventTimeHour, careEventTimeMinute, careEventTimePeriod);
+    // const displayTime = formatDisplayTime(careEventTimeHour, careEventTimeMinute, careEventTimePeriod);
 
     const executeSaveCareEvent = async () => {
       setIsSavingCare(true);
@@ -1239,7 +1239,7 @@ export function CareEventsPage() {
     const startDatetime = `${outdoorEventStartDate}T${time24}:00`;
     const endDateBase = (!outdoorEventIsNeverEnding && outdoorEventEndDate) ? outdoorEventEndDate : outdoorEventStartDate;
     const endDatetimeFinal = `${endDateBase}T${endTime24}:00`;
-    const displayTime = formatDisplayTime(outdoorEventTimeHour, outdoorEventTimeMinute, outdoorEventTimePeriod);
+    // const displayTime = formatDisplayTime(outdoorEventTimeHour, outdoorEventTimeMinute, outdoorEventTimePeriod);
 
     const executeSaveOutdoor = async () => {
       setIsSavingOutdoor(true);
