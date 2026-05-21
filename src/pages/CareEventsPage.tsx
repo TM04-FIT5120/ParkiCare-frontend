@@ -16,6 +16,7 @@ import { scanMedicineLabel } from "@/services/ocr";
 // import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString, isEventOnDay } from "@/lib/eventRecurrence";
 import { translateEnum } from "@/lib/translateEnum";
+import { translateMealTitle, isMealTitle } from "@/lib/translateMealTitle";
 import { getMealSchedules, updateMealTime, type MealScheduleEntry } from "@/services/mealSchedule";
 import { activityService, type WeatherData, type ActivitySuggestion } from "@/services/activityRecommendations";
 import { ObservationNoteModal } from "@/components/ObservationNoteModal";
@@ -98,6 +99,14 @@ function hhmmTo12h(hhmm: string): string {
   if (h === 0) h = 12;
   else if (h > 12) h -= 12;
   return `${String(h).padStart(2, "0")}:${mStr} ${formatPeriodLabel(period)}`;
+}
+
+function datesOverlap(
+  start1: string, end1: string | null,
+  start2: string, end2: string | null,
+): boolean {
+  const FAR = "9999-12-31";
+  return start1 <= (end2 ?? FAR) && start2 <= (end1 ?? FAR);
 }
 
 function calculateDoseTimes(
@@ -342,7 +351,10 @@ export function CareEventsPage() {
     const isEventSection = ["#care-event-section", "#outdoor-event-section", "#caregiver-event-section", "#events-section"].includes(hash);
     const scrollId = isEventSection ? "events-section" : hash.slice(1);
     const el = document.getElementById(scrollId) ?? document.getElementById(hash.slice(1));
-    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    if (el) setTimeout(() => {
+      const top = el.getBoundingClientRect().top + window.scrollY - 80;
+      window.scrollTo({ top, behavior: "smooth" });
+    }, 300);
   }, []);
 
   // --- Medication state ---
@@ -484,6 +496,9 @@ export function CareEventsPage() {
   const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
   const [feedbackInProgress, setFeedbackInProgress] = useState<Set<string>>(new Set());
+  const [aiSuggestionConflicts, setAiSuggestionConflicts] = useState<
+    Map<string, { title: string; startTime: string; endTime: string; date: string } | null>
+  >(new Map());
   const [editingAiSuggestionIndex, setEditingAiSuggestionIndex] = useState<number | null>(null);
   const [aiSuggestionEditDraft, setAiSuggestionEditDraft] = useState<{
     editHour: string;
@@ -491,9 +506,31 @@ export function CareEventsPage() {
     editPeriod: "AM" | "PM";
   } | null>(null);
 
+  // --- Duplicate medication guard ---
+  const [showDuplicateMedModal, setShowDuplicateMedModal] = useState(false);
+  const [duplicateMedType, setDuplicateMedType] = useState<"name-only" | "name-and-dose" | null>(null);
+  const [pendingDuplicateSave, setPendingDuplicateSave] = useState<(() => Promise<void>) | null>(null);
+
   // --- Medication overlap warning ---
   const [showOverlapModal, setShowOverlapModal] = useState(false);
   const [pendingOverlapAction, setPendingOverlapAction] = useState<(() => Promise<void>) | null>(null);
+
+  // --- Schedule clash warning ---
+  const [showScheduleClashModal, setShowScheduleClashModal] = useState(false);
+  const [pendingScheduleClashAction, setPendingScheduleClashAction] = useState<(() => Promise<void>) | null>(null);
+  const [scheduleClashInfo, setScheduleClashInfo] = useState<{
+    title: string;
+    startTime: string;
+    endTime: string;
+    date: string;
+  } | null>(null);
+
+  // Computes HH:mm end time given a start time (HH:mm) and duration in minutes
+  function suggestionEndTime(startTime: string, durationMinutes: number): string {
+    const [h, m] = startTime.split(":").map(Number);
+    const totalMin = h * 60 + m + durationMinutes;
+    return `${String(Math.floor(totalMin / 60) % 24).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
+  }
 
   // Returns true if eventStartTime (HH:mm) is within 60 min of any scheduled med time
   function hasMedicationOverlap(eventStartTime: string): boolean {
@@ -511,6 +548,72 @@ export function CareEventsPage() {
   const careEvents = events.filter(ev => CARE_EVENT_TYPES.includes(ev.type) || ev.eventType === "home");
   const outdoorEvents = events.filter(ev => OUTDOOR_EVENT_TYPES.includes(ev.type) || ev.eventType === "outdoor");
 
+  // Returns first schedule-on-schedule clash for a new event, or null if clear.
+  // Checks agenda (caregiver schedule) + HomeCare + Outdoor events over up to 60 days.
+  function findScheduleConflict(
+    newStartDate: string,      // YYYY-MM-DD
+    newStartTime: string,      // HH:mm
+    newEndTime: string,        // HH:mm
+    newRecurrence: string,     // "none"|"daily"|"weekdays"|"weekly"
+    newEndDate: string | null, // series end YYYY-MM-DD, or null for never-ending
+  ): { title: string; startTime: string; endTime: string; date: string } | null {
+    const toMin = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const sliceDate = (dt: string) => dt.slice(0, 10);
+    const sliceTime = (dt: string) => dt.slice(11, 16); // HH:mm
+
+    type Ev = { title: string; startDate: string; seriesEnd: string | undefined; recurrence: string | null; startTime: string; endTime: string };
+
+    const allExisting: Ev[] = [
+      ...agenda.map(a => {
+        const sd = sliceDate(a.startDatetime);
+        const ed = a.endDatetime ? sliceDate(a.endDatetime) : undefined;
+        return { title: a.title, startDate: sd, seriesEnd: ed && ed > sd ? ed : undefined, recurrence: a.recurrence, startTime: sliceTime(a.startDatetime), endTime: a.endDatetime ? sliceTime(a.endDatetime) : sliceTime(a.startDatetime) };
+      }),
+      ...careEvents.map(e => {
+        const sd = sliceDate(e.startDatetime ?? "");
+        const ed = e.endDatetime ? sliceDate(e.endDatetime) : undefined;
+        return { title: e.title ?? "", startDate: sd, seriesEnd: ed && ed > sd ? ed : undefined, recurrence: e.recurrence ?? null, startTime: sliceTime(e.startDatetime ?? ""), endTime: e.endDatetime ? sliceTime(e.endDatetime) : sliceTime(e.startDatetime ?? "") };
+      }),
+      ...outdoorEvents.map(e => {
+        const sd = sliceDate(e.startDatetime ?? "");
+        const ed = e.endDatetime ? sliceDate(e.endDatetime) : undefined;
+        return { title: e.title ?? "", startDate: sd, seriesEnd: ed && ed > sd ? ed : undefined, recurrence: e.recurrence ?? null, startTime: sliceTime(e.startDatetime ?? ""), endTime: e.endDatetime ? sliceTime(e.endDatetime) : sliceTime(e.startDatetime ?? "") };
+      }),
+    ].filter(e => e.startDate && e.startTime);
+
+    const newStartMin = toMin(newStartTime);
+    const newEndMin   = toMin(newEndTime);
+
+    // Cap window at 60 days from newStartDate
+    const maxDate = new Date(newStartDate + "T00:00:00");
+    maxDate.setDate(maxDate.getDate() + 60);
+    const maxDateStr = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, "0")}-${String(maxDate.getDate()).padStart(2, "0")}`;
+    const windowEnd = newEndDate && newEndDate < maxDateStr ? newEndDate : maxDateStr;
+
+    const cursor = new Date(newStartDate + "T00:00:00");
+    while (true) {
+      const dayStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (dayStr > windowEnd) break;
+
+      if (isEventOnDay(dayStr, newStartDate, newEndDate, newRecurrence)) {
+        for (const ev of allExisting) {
+          if (!isEventOnDay(dayStr, ev.startDate, ev.seriesEnd, ev.recurrence)) continue;
+          const evStartMin = toMin(ev.startTime);
+          const evEndMin   = toMin(ev.endTime);
+          // True overlap: newStart < existEnd AND existStart < newEnd
+          if (newStartMin < evEndMin && evStartMin < newEndMin) {
+            return { title: ev.title, startTime: ev.startTime, endTime: ev.endTime, date: dayStr };
+          }
+        }
+      }
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return null;
+  }
 
   // Debounced drug name search
   useEffect(() => {
@@ -814,7 +917,7 @@ export function CareEventsPage() {
         patientId, drug.drugId,
         drug.dosage ?? "", testFrequency,
         adminTimesStr, remindTime, todayStr,
-        "", null, null, null, null, null, null,
+        "", null, null, null, null, todayStr, "none",
       );
       refresh();
       toast.success(t("careEvents.testMedScheduled"));
@@ -879,52 +982,83 @@ export function CareEventsPage() {
     const finalEndDate = isNeverEnding ? startDate : (endDate || null);
     const finalRecurrence = recurrence;
 
-    setIsSavingMed(true);
-    try {
-      if (!patientId) {
-        toast.error(t("careEvents.noPatientProfile"));
-        return;
-      }
+    // ── Duplicate medication check ──────────────────────────────────────────────
+    const newNameNorm = medName.trim().toLowerCase();
+    const newDoseNorm = finalDosage.toLowerCase();
+    const newEnd = isNeverEnding ? null : (endDate || null);
 
-      const drug = await resolveDrugForSave(medName, selectedDrug, drugSearchResults);
-      if (!drug) {
-        const candidates = await findDrugCandidates(medName, drugSearchResults);
-        if (candidates.length === 0) {
-          toast.error(t("careEvents.selectMedFromSearch"));
+    const nameMatches = meds.filter((m) => {
+      if (m.name.trim().toLowerCase() !== newNameNorm) return false;
+      const mStart = m.startDate ?? "2000-01-01";
+      const mEnd = m.endDate ?? null;
+      return datesOverlap(startDate, newEnd, mStart, mEnd);
+    });
+
+    const executeActualSave = async () => {
+      setIsSavingMed(true);
+      try {
+        if (!patientId) {
+          toast.error(t("careEvents.noPatientProfile"));
           return;
         }
-        setDrugSearchResults(candidates);
-        setShowMedsDropdown(true);
-        setShowConfirmModal(false);
-        setMedicationStep(1);
-        toast.info(t("careEvents.drugPicker.selectFromDropdown"));
+
+        const drug = await resolveDrugForSave(medName, selectedDrug, drugSearchResults);
+        if (!drug) {
+          const candidates = await findDrugCandidates(medName, drugSearchResults);
+          if (candidates.length === 0) {
+            toast.error(t("careEvents.selectMedFromSearch"));
+            return;
+          }
+          setDrugSearchResults(candidates);
+          setShowMedsDropdown(true);
+          setShowConfirmModal(false);
+          setMedicationStep(1);
+          toast.info(t("careEvents.drugPicker.selectFromDropdown"));
+          return;
+        }
+
+        await careEventsService.createMedication(
+          patientId,
+          drug.drugId,
+          finalDosage,
+          frequency,
+          adminTimesStr,
+          remindTime,
+          startDate,
+          "",
+          mealTiming,
+          selectedMeals.length > 0 ? selectedMeals.join(",") : null,
+          finalQuantity,
+          finalIntakeMethod,
+          finalEndDate,
+          finalRecurrence,
+        );
+        refresh();
+        toast.success(t("careEvents.medScheduled"));
+        resetMedicationForm();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t("careEvents.failedSaveMed"));
+      } finally {
+        setIsSavingMed(false);
+      }
+    };
+
+    if (nameMatches.length > 0) {
+      const hasDoseMatch = nameMatches.some(
+        (m) => m.dose.trim().toLowerCase() === newDoseNorm
+      );
+      if (hasDoseMatch) {
+        setDuplicateMedType("name-and-dose");
+        setShowDuplicateMedModal(true);
         return;
       }
-
-      await careEventsService.createMedication(
-        patientId,
-        drug.drugId,
-        finalDosage,
-        frequency,
-        adminTimesStr,
-        remindTime,
-        startDate,
-        "",
-        mealTiming,
-        selectedMeals.length > 0 ? selectedMeals.join(",") : null,
-        finalQuantity,
-        finalIntakeMethod,
-        finalEndDate,
-        finalRecurrence,
-      );
-      refresh();
-      toast.success(t("careEvents.medScheduled"));
-      resetMedicationForm();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("careEvents.failedSaveMed"));
-    } finally {
-      setIsSavingMed(false);
+      setDuplicateMedType("name-only");
+      setPendingDuplicateSave(() => executeActualSave);
+      setShowDuplicateMedModal(true);
+      return;
     }
+
+    await executeActualSave();
   };
 
 
@@ -1044,7 +1178,7 @@ export function CareEventsPage() {
               eventType: "home",
               title: created.homeCareTitle,
               type: careEventType,
-              time: displayTime,
+              time: time24,
               startDatetime: created.startDatetime,
               endDatetime: created.endDatetime,
               recurrence: created.recurrence,
@@ -1055,7 +1189,7 @@ export function CareEventsPage() {
             return;
           }
         } else {
-          addEvent({ title: careEventType, type: careEventType, time: displayTime });
+          addEvent({ title: careEventType, type: careEventType, time: time24 });
           toast.success(t("careEvents.careEventSavedLocally"));
         }
 
@@ -1075,6 +1209,17 @@ export function CareEventsPage() {
       }
     };
 
+    const clash = findScheduleConflict(
+      careEventStartDate, time24, endTime24,
+      careEventRecurrence,
+      careEventIsNeverEnding ? null : (careEventEndDate || null),
+    );
+    if (clash) {
+      setScheduleClashInfo(clash);
+      setPendingScheduleClashAction(() => executeSaveCareEvent);
+      setShowScheduleClashModal(true);
+      return;
+    }
     if (meds.length > 0 && hasMedicationOverlap(time24)) {
       setPendingOverlapAction(() => executeSaveCareEvent);
       setShowOverlapModal(true);
@@ -1115,7 +1260,7 @@ export function CareEventsPage() {
               eventType: "outdoor",
               title: created.outdoorTitle,
               type: outdoorEventType,
-              time: displayTime,
+              time: time24,
               startDatetime: created.startDatetime,
               endDatetime: created.endDatetime,
               recurrence: created.recurrence,
@@ -1126,7 +1271,7 @@ export function CareEventsPage() {
             return;
           }
         } else {
-          addEvent({ title: outdoorEventType, type: outdoorEventType, time: displayTime });
+          addEvent({ title: outdoorEventType, type: outdoorEventType, time: time24 });
           toast.success(t("careEvents.outdoorEventSavedLocally"));
         }
 
@@ -1146,6 +1291,17 @@ export function CareEventsPage() {
       }
     };
 
+    const clash = findScheduleConflict(
+      outdoorEventStartDate, time24, endTime24,
+      outdoorEventRecurrence,
+      outdoorEventIsNeverEnding ? null : (outdoorEventEndDate || null),
+    );
+    if (clash) {
+      setScheduleClashInfo(clash);
+      setPendingScheduleClashAction(() => executeSaveOutdoor);
+      setShowScheduleClashModal(true);
+      return;
+    }
     if (meds.length > 0 && hasMedicationOverlap(time24)) {
       setPendingOverlapAction(() => executeSaveOutdoor);
       setShowOverlapModal(true);
@@ -1184,7 +1340,7 @@ export function CareEventsPage() {
 
   useEffect(() => {
     refreshCaregiverAgenda();
-  }, [refreshCaregiverAgenda]);
+  }, [refreshCaregiverAgenda, currentLang]);
 
   const isEventsListLoading = careEventsLoading || isAgendaLoading;
 
@@ -1238,6 +1394,17 @@ export function CareEventsPage() {
       }
     };
 
+    const clash = findScheduleConflict(
+      caregiverEventStartDate, startTime24, endTime24,
+      caregiverEventRecurrence,
+      caregiverEventIsNeverEnding ? null : (caregiverEventEndDate || null),
+    );
+    if (clash) {
+      setScheduleClashInfo(clash);
+      setPendingScheduleClashAction(() => executeSaveCaregiverEvent);
+      setShowScheduleClashModal(true);
+      return;
+    }
     if (meds.length > 0 && hasMedicationOverlap(startTime24)) {
       setPendingOverlapAction(() => executeSaveCaregiverEvent);
       setShowOverlapModal(true);
@@ -1271,9 +1438,19 @@ export function CareEventsPage() {
     setAiSuggestionsError(null);
     setEditingAiSuggestionIndex(null);
     setAiSuggestionEditDraft(null);
+    setAiSuggestionConflicts(new Map());
     try {
       const suggestions = await activityService.generateSuggestions(caregiverId, userLocation.lat, userLocation.lon);
       setAiSuggestions(suggestions);
+      // Pre-compute schedule conflicts for each suggestion so badges can be shown immediately
+      const today = getMYTDateString();
+      const conflicts = new Map<string, { title: string; startTime: string; endTime: string; date: string } | null>();
+      for (const s of suggestions) {
+        const key = `${s.eventName}-${s.startTime}`;
+        const endTime = suggestionEndTime(s.startTime, s.durationMinutes);
+        conflicts.set(key, findScheduleConflict(today, s.startTime, endTime, "none", null));
+      }
+      setAiSuggestionConflicts(conflicts);
     } catch {
       setAiSuggestionsError(t("careEvents.aiSuggestions.generateFailed"));
     } finally {
@@ -1315,10 +1492,22 @@ export function CareEventsPage() {
       setShowOverlapModal(true);
       return;
     }
+
+    if (feedback === "accept") {
+      const today = getMYTDateString();
+      const endTime = suggestionEndTime(suggestion.startTime, suggestion.durationMinutes);
+      const clash = findScheduleConflict(today, suggestion.startTime, endTime, "none", null);
+      if (clash) {
+        setScheduleClashInfo(clash);
+        setPendingScheduleClashAction(() => doFeedback);
+        setShowScheduleClashModal(true);
+        return;
+      }
+    }
+
     await doFeedback();
   };
 
-  const MEAL_TITLES = [t("dashboard.breakfast"), t("dashboard.lunch"), t("dashboard.dinner")];
 
   // Build combined event lists for the unified list panel
   const combinedEvents = useMemo(() => {
@@ -1403,7 +1592,7 @@ export function CareEventsPage() {
 
     return expanded
       .filter(e => {
-        const isMeal = e.eventKind === "caregiver" && MEAL_TITLES.includes(e.title);
+        const isMeal = e.eventKind === "caregiver" && isMealTitle(e.title);
         if (isMeal && hideMealEvents) return false;
         if (isMeal && e.startDatetime) {
           const evDate = new Date(e.startDatetime);
@@ -2867,6 +3056,16 @@ export function CareEventsPage() {
                             {tags.map(([label, style]) => (
                               <span key={label} className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${style}`}>{label}</span>
                             ))}
+                            {(() => {
+                              const conflict = aiSuggestionConflicts.get(key);
+                              if (!conflict) return null;
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-700 border border-amber-300">
+                                  <TriangleAlert className="w-2.5 h-2.5" />
+                                  {t("careEvents.aiSuggestions.conflictWith", { title: conflict.title })}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <p className="text-[12px] font-semibold text-[#A3AED0] mt-2 leading-relaxed line-clamp-2">{s.remark}</p>
                           {isEditing && aiSuggestionEditDraft ? (
@@ -3560,7 +3759,7 @@ export function CareEventsPage() {
                               {/* Body */}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-[14px] font-extrabold tracking-tight text-[#1F2247] truncate">{ev.title}</p>
+                                  <p className="text-[14px] font-extrabold tracking-tight text-[#1F2247] truncate">{translateMealTitle(ev.title) ?? ev.title}</p>
                                   <span className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-widest"
                                     style={{ background: meta.bg, color: meta.color }}>
                                     {meta.label}
@@ -3577,9 +3776,9 @@ export function CareEventsPage() {
                                     </span>
                                   )}
                                   {ev.recurrence && ev.recurrence !== "none" && (
-                                    <span className="flex items-center gap-1 text-[11px] font-bold text-[#6B7299] capitalize">
+                                    <span className="flex items-center gap-1 text-[11px] font-bold text-[#6B7299]">
                                       <Info className="w-3 h-3 shrink-0" />
-                                      {ev.recurrence}
+                                      {translateRecurrence(ev.recurrence, ev.startDatetime?.slice(0, 10))}
                                     </span>
                                   )}
                                 </div>
@@ -3687,6 +3886,149 @@ export function CareEventsPage() {
                 >
                   Continue Anyway
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Schedule Clash Warning Modal */}
+      <AnimatePresence>
+        {showScheduleClashModal && scheduleClashInfo && (
+          <motion.div
+            key="schedule-clash-overlay"
+            className="fixed inset-0 z-[9500] flex items-center justify-center p-4 p-safe"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => { setShowScheduleClashModal(false); setPendingScheduleClashAction(null); setScheduleClashInfo(null); }}
+            />
+            <motion.div
+              key="schedule-clash-card"
+              className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full mx-4 z-10 border border-rose-100 overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            >
+              <div className="flex items-start gap-3 p-5 border-b border-rose-100 bg-rose-50/80">
+                <TriangleAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-[#2B3674]">{t("careEvents.scheduleClashTitle")}</h3>
+                  <p className="text-sm text-[#707EAE] mt-0.5">{t("careEvents.scheduleClashSubtitle")}</p>
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="rounded-xl border border-[#EEEAFB] p-3 text-sm text-[#2B3674] bg-[#F8FAFF] mb-4">
+                  <p className="font-semibold text-rose-700">{scheduleClashInfo.title}</p>
+                  <p className="text-[#707EAE] mt-1">
+                    {scheduleClashInfo.startTime} – {scheduleClashInfo.endTime}
+                    {" · "}{scheduleClashInfo.date}
+                  </p>
+                </div>
+                <p className="text-sm text-[#2B3674]">{t("careEvents.scheduleClashBody")}</p>
+              </div>
+              <div className="px-5 pb-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowScheduleClashModal(false); setPendingScheduleClashAction(null); setScheduleClashInfo(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E0E5F2] text-sm font-bold text-[#A3AED0] hover:bg-[#F4F7FE] transition-all"
+                >
+                  {t("careEvents.scheduleClashCancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowScheduleClashModal(false);
+                    setScheduleClashInfo(null);
+                    if (pendingScheduleClashAction) await pendingScheduleClashAction();
+                    setPendingScheduleClashAction(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-sm font-bold text-white transition-all"
+                >
+                  {t("careEvents.scheduleClashContinue")}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Duplicate Medication Modal */}
+      <AnimatePresence>
+        {showDuplicateMedModal && (
+          <motion.div
+            key="duplicate-med-overlay"
+            className="fixed inset-0 z-[9500] flex items-center justify-center p-4 p-safe"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={duplicateMedType === "name-and-dose" ? undefined : () => { setShowDuplicateMedModal(false); setDuplicateMedType(null); setPendingDuplicateSave(null); }}
+            />
+            <motion.div
+              key="duplicate-med-card"
+              className="relative bg-white rounded-[20px] p-6 shadow-2xl max-w-sm w-full mx-4 z-10"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${duplicateMedType === "name-and-dose" ? "bg-red-100" : "bg-amber-100"}`}>
+                  <TriangleAlert className={`w-5 h-5 ${duplicateMedType === "name-and-dose" ? "text-red-600" : "text-amber-600"}`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#2B3674]">
+                    {duplicateMedType === "name-and-dose" ? "Duplicate Medication" : "Same Medication Name"}
+                  </h3>
+                  <p className="text-xs text-[#A3AED0]">
+                    {duplicateMedType === "name-and-dose" ? "Hard block — cannot be added" : "Different dosage detected"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-[#2B3674] mb-5">
+                {duplicateMedType === "name-and-dose"
+                  ? "A medication with the same name and dosage is already scheduled during this period. Please remove the existing plan before adding a new one."
+                  : "A medication with the same name (but a different dosage) is already scheduled during this period. Are you sure you want to continue?"}
+              </p>
+              <div className="flex gap-3">
+                {duplicateMedType === "name-and-dose" ? (
+                  <button
+                    type="button"
+                    onClick={() => { setShowDuplicateMedModal(false); setDuplicateMedType(null); }}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-bold text-white transition-all"
+                  >
+                    Got It
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => { setShowDuplicateMedModal(false); setDuplicateMedType(null); setPendingDuplicateSave(null); }}
+                      className="flex-1 py-2.5 rounded-xl border border-[#E0E5F2] text-sm font-bold text-[#A3AED0] hover:bg-[#F4F7FE] transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setShowDuplicateMedModal(false);
+                        setDuplicateMedType(null);
+                        if (pendingDuplicateSave) await pendingDuplicateSave();
+                        setPendingDuplicateSave(null);
+                      }}
+                      className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-sm font-bold text-white transition-all"
+                    >
+                      Proceed Anyway
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>

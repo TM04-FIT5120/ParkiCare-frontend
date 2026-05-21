@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X, ClipboardList, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -87,7 +88,7 @@ export function ObservationNoteModal({ alert, caregiverId, onDismiss }: Observat
     },
   ];
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <>
         <motion.div
@@ -216,6 +217,7 @@ export function ObservationNoteModal({ alert, caregiverId, onDismiss }: Observat
           </motion.div>
         </div>
       </>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

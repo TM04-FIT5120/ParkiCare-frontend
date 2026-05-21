@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -427,6 +428,7 @@ export function PerkinsDetailsPage() {
   const { t } = useTranslation();
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [activeSection, setActiveSection] = useState<Section | null>(null);
+  const [highlightBpt, setHighlightBpt] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const sections = useSections(navigate);
@@ -434,15 +436,26 @@ export function PerkinsDetailsPage() {
   useEffect(() => {
     if (location.hash === '#miasa-support') {
       const timer = setTimeout(() => {
-        document.getElementById('miasa-support')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const el = document.getElementById('miasa-support');
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.scrollY - 80;
+          window.scrollTo({ top, behavior: 'smooth' });
+        }
       }, 300);
       return () => clearTimeout(timer);
     }
     if (location.hash === '#bpt-allowance') {
-      const timer = setTimeout(() => {
+      const scrollTimer = setTimeout(() => {
         document.getElementById('bpt-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 350);
-      return () => clearTimeout(timer);
+      const highlightTimer = setTimeout(() => {
+        setHighlightBpt(true);
+        setTimeout(() => setHighlightBpt(false), 900);
+      }, 750);
+      return () => {
+        clearTimeout(scrollTimer);
+        clearTimeout(highlightTimer);
+      };
     }
   }, [location.hash]);
 
@@ -547,9 +560,21 @@ export function PerkinsDetailsPage() {
               type="button"
               onClick={() => setActiveSection(section)}
               initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.05 }}
-              className="group bg-white rounded-[20px] overflow-hidden shadow-[0_18px_40px_rgba(112,144,176,0.12)] text-left hover:shadow-[0_24px_50px_rgba(112,144,176,0.2)] hover:-translate-y-1 transition-all duration-200 flex flex-col"
+              animate={
+                section.id === 9 && highlightBpt
+                  ? { opacity: 1, y: 0, scale: [1, 1.05, 1] }
+                  : { opacity: 1, y: 0, scale: 1 }
+              }
+              transition={
+                section.id === 9 && highlightBpt
+                  ? { duration: 0.6, ease: "easeInOut" }
+                  : { delay: 0.1 + i * 0.05 }
+              }
+              className={`group bg-white rounded-[20px] overflow-hidden text-left hover:-translate-y-1 transition-all duration-200 flex flex-col ${
+                section.id === 9 && highlightBpt
+                  ? "shadow-[0_0_0_3px_#4318FF,0_18px_40px_rgba(67,24,255,0.25)]"
+                  : "shadow-[0_18px_40px_rgba(112,144,176,0.12)] hover:shadow-[0_24px_50px_rgba(112,144,176,0.2)]"
+              }`}
             >
               <div className="relative h-44 overflow-hidden">
                 <img
@@ -686,54 +711,57 @@ export function PerkinsDetailsPage() {
         </div>
       </motion.section>
 
-      <AnimatePresence>
-        {activeSection && (
-          <>
-            <motion.div
-              key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] min-h-[100dvh] w-full bg-black/40 backdrop-blur-md"
-              onClick={() => setActiveSection(null)}
-            />
+      {createPortal(
+        <AnimatePresence>
+          {activeSection && (
+            <>
+              <motion.div
+                key="backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[200] min-h-[100dvh] w-full bg-black/40 backdrop-blur-md"
+                onClick={() => setActiveSection(null)}
+              />
 
-            <motion.div
-              key="modal"
-              initial={{ opacity: 0, y: 0, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 40, scale: 0.97 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed inset-4 z-[210] bg-white rounded-[24px] shadow-2xl flex flex-col overflow-hidden"
-            >
-              <div className="relative h-48 shrink-0">
-                <img
-                  src={activeSection.image}
-                  alt={t(activeSection.imageAltKey)}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#2B3674]/80 to-transparent" />
-                <div className="absolute bottom-4 left-5 right-14 flex items-center gap-2">
-                  <activeSection.icon className={`w-6 h-6 shrink-0 text-white`} />
-                  <h2 className="text-white text-xl font-extrabold leading-tight">{t(activeSection.titleKey)}</h2>
+              <motion.div
+                key="modal"
+                initial={{ opacity: 0, y: 0, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.97 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="fixed inset-4 z-[210] bg-white rounded-[24px] shadow-2xl flex flex-col overflow-hidden"
+              >
+                <div className="relative h-48 shrink-0">
+                  <img
+                    src={activeSection.image}
+                    alt={t(activeSection.imageAltKey)}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#2B3674]/80 to-transparent" />
+                  <div className="absolute bottom-4 left-5 right-14 flex items-center gap-2">
+                    <activeSection.icon className={`w-6 h-6 shrink-0 text-white`} />
+                    <h2 className="text-white text-xl font-extrabold leading-tight">{t(activeSection.titleKey)}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection(null)}
+                    className="absolute top-3 right-3 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors"
+                    aria-label={t("knowledgeHub.modalClose")}
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveSection(null)}
-                  className="absolute top-3 right-3 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors"
-                  aria-label={t("knowledgeHub.modalClose")}
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
-              </div>
 
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                {activeSection.render()}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                  {activeSection.render()}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }

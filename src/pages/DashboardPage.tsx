@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useNavigate } from "react-router-dom";
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMonthYear, formatMonthShort, formatWeekday } from "@/lib/dateLocale";
+import { translateMealTitle } from "@/lib/translateMealTitle";
 import { useCareEvents } from "@/hooks/useCareEvents";
 import { careEventsService } from "@/services/careEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
@@ -68,6 +70,12 @@ function getMYTNow(): Date {
   return new Date(utcMs + 8 * 3_600_000);
 }
 
+function addMinutesToHHMM(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = h * 60 + m + minutes;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 function addDaysStr(dateStr: string, n: number): string {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + n);
@@ -105,6 +113,7 @@ type DashboardScheduleRow = {
   occurrenceStart: string;
   title: string;
   time: string;
+  endTime: string;
   completed: boolean;
   source: "caregiver" | "medication" | "home" | "outdoor";
 };
@@ -705,7 +714,7 @@ function DayTimeline({
               · <span className="text-[#F59E0B] font-bold">{schedule.length - completed} {t("dashboard.toGo")}</span>
             </p>
             <AnimatePresence mode="popLayout">
-              {pendingCount > 0 && (
+              {/* {pendingCount > 0 && (
                 <motion.span
                   key="pending"
                   initial={shouldReduceMotion ? {} : { scale: 0.7, opacity: 0 }}
@@ -715,7 +724,7 @@ function DayTimeline({
                 >
                   {pendingCount} {t("dashboard.pending")}
                 </motion.span>
-              )}
+              )} */}
               {overdueCount > 0 && (
                 <motion.span
                   key="overdue"
@@ -787,7 +796,8 @@ function DayTimeline({
                   {/* Time */}
                   <div className="w-[64px] shrink-0 text-right pt-2.5 leading-none">
                     <div className="font-mono text-[12px] font-extrabold text-[#1F2247] whitespace-nowrap">{item.time}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-[#A3AED0] font-bold mt-1.5 whitespace-nowrap">{ampm}</div>
+                    <div className="font-mono text-[10px] text-[#A3AED0] font-semibold mt-0.5 whitespace-nowrap">{item.endTime}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#A3AED0] font-bold mt-1 whitespace-nowrap">{ampm}</div>
                   </div>
 
                   {/* Dot */}
@@ -831,7 +841,7 @@ function DayTimeline({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className={`text-[14px] font-extrabold tracking-tight truncate ${item.completed ? "text-[#A3AED0] line-through" : "text-[#1F2247]"}`}>
-                          {item.title === "Breakfast" ? t("dashboard.breakfast") : item.title === "Lunch" ? t("dashboard.lunch") : item.title === "Dinner" ? t("dashboard.dinner") : item.title}
+                          {translateMealTitle(item.title) ?? item.title}
                         </p>
                         <span
                           className="px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-widest whitespace-nowrap"
@@ -850,7 +860,7 @@ function DayTimeline({
                       </div>
                       <p className="text-[12px] text-[#6B7299] mt-0.5 flex items-center gap-1">
                         <Clock className="w-3 h-3 shrink-0" />
-                        {item.time}
+                        {item.time} – {item.endTime}
                       </p>
                     </div>
                   </div>
@@ -1228,7 +1238,7 @@ export function DashboardPage() {
       const startTime = item.startDatetime.slice(11, 16);
       const occurrenceStart = occurrenceIsoForDay(selectedDate, startTime);
       const rowKey = completionLookupKey("CAREGIVER_SCHEDULE", item.id, occurrenceStart);
-      rows.push({ rowKey, sourceType: "CAREGIVER_SCHEDULE", sourceId: item.id, occurrenceStart, title: item.title, time: item.time, completed: completionKeys.has(rowKey), source: "caregiver" });
+      rows.push({ rowKey, sourceType: "CAREGIVER_SCHEDULE", sourceId: item.id, occurrenceStart, title: item.title, time: item.time, endTime: item.endDatetime.slice(11, 16), completed: completionKeys.has(rowKey), source: "caregiver" });
     }
 
     for (const med of patientMedications) {
@@ -1239,7 +1249,7 @@ export function DashboardPage() {
       const sid = med.remindId ?? med.id;
       const occurrenceStart = occurrenceIsoForDay(selectedDate, med.time);
       const rowKey = completionLookupKey("MEDICATION_PLAN", sid, occurrenceStart);
-      rows.push({ rowKey, sourceType: "MEDICATION_PLAN", sourceId: sid, occurrenceStart, title: `${med.name}${med.dose ? ` · ${med.dose}` : ""}`, time: med.time, completed: completionKeys.has(rowKey), source: "medication" });
+      rows.push({ rowKey, sourceType: "MEDICATION_PLAN", sourceId: sid, occurrenceStart, title: `${med.name}${med.dose ? ` · ${med.dose}` : ""}`, time: med.time, endTime: addMinutesToHHMM(med.time, 5), completed: completionKeys.has(rowKey), source: "medication" });
     }
 
     for (const ev of patientEventsStore) {
@@ -1254,7 +1264,7 @@ export function DashboardPage() {
       const sourceType: EventOccurrenceSourceType = isOutdoor ? "PATIENT_OUTDOOR" : "PATIENT_HOME_CARE";
       const sourceId = isOutdoor ? resolveOutdoorSourceId(ev) : (ev.backendId ?? ev.id);
       const rowKey = completionLookupKey(sourceType, sourceId, occurrenceStart);
-      rows.push({ rowKey, sourceType, sourceId, occurrenceStart, title: ev.title, time: ev.time ?? startTime, completed: completionKeys.has(rowKey), source: isOutdoor ? "outdoor" : "home" });
+      rows.push({ rowKey, sourceType, sourceId, occurrenceStart, title: ev.title, time: ev.time ?? startTime, endTime: ev.endDatetime ? ev.endDatetime.slice(11, 16) : addMinutesToHHMM(ev.time ?? startTime, 60), completed: completionKeys.has(rowKey), source: isOutdoor ? "outdoor" : "home" });
     }
 
     return rows.sort((a, b) => a.time.localeCompare(b.time));
@@ -1480,78 +1490,81 @@ export function DashboardPage() {
       </div>
 
       {/* ── Task Completion Modal ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {confirmRow !== null && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              onClick={handleCancelComplete}
-              className="fixed inset-0 bg-black/50 backdrop-blur-md z-50"
-            />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 p-safe pointer-events-none">
+      {createPortal(
+        <AnimatePresence>
+          {confirmRow !== null && (
+            <>
               <motion.div
-                initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.9, y: 24 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 24 }}
-                transition={{ type: "spring", stiffness: 340, damping: 28 }}
-                className="w-full max-w-md pointer-events-auto"
-              >
-                <div className="bg-white/95 backdrop-blur-sm rounded-[24px] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.22)] border border-[#E9E3FF]/60">
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${confirmMode === "undo" ? "bg-amber-100" : "bg-gradient-to-br from-[#4318FF] to-[#8B5CF6]"}`}>
-                        {confirmMode === "undo"
-                          ? <Circle className="w-5 h-5 text-amber-600" />
-                          : <CheckCircle2 className="w-5 h-5 text-white" />}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={handleCancelComplete}
+                className="fixed inset-0 bg-black/50 backdrop-blur-md z-50"
+              />
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 p-safe pointer-events-none">
+                <motion.div
+                  initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.9, y: 24 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 24 }}
+                  transition={{ type: "spring", stiffness: 340, damping: 28 }}
+                  className="w-full max-w-md pointer-events-auto"
+                >
+                  <div className="bg-white/95 backdrop-blur-sm rounded-[24px] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.22)] border border-[#E9E3FF]/60">
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${confirmMode === "undo" ? "bg-amber-100" : "bg-gradient-to-br from-[#4318FF] to-[#8B5CF6]"}`}>
+                          {confirmMode === "undo"
+                            ? <Circle className="w-5 h-5 text-amber-600" />
+                            : <CheckCircle2 className="w-5 h-5 text-white" />}
+                        </div>
+                        <h3 className="text-lg font-bold text-[#1F2247]">
+                          {confirmMode === "undo" ? t("dashboard.undoTask") : t("dashboard.completeTask")}
+                        </h3>
                       </div>
-                      <h3 className="text-lg font-bold text-[#1F2247]">
-                        {confirmMode === "undo" ? t("dashboard.undoTask") : t("dashboard.completeTask")}
-                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleCancelComplete}
+                        className="p-2 hover:bg-[#F4F7FE] rounded-xl transition-colors cursor-pointer"
+                      >
+                        <X className="w-5 h-5 text-[#A3AED0]" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleCancelComplete}
-                      className="p-2 hover:bg-[#F4F7FE] rounded-xl transition-colors cursor-pointer"
-                    >
-                      <X className="w-5 h-5 text-[#A3AED0]" />
-                    </button>
-                  </div>
-                  {confirmTaskTitle && (
-                    <div className="mb-4 p-3 bg-[#F8F7FF] rounded-xl border border-[#E9E3FF]/50">
-                      <p className="text-sm font-bold text-[#1F2247] truncate">{confirmTaskTitle}</p>
+                    {confirmTaskTitle && (
+                      <div className="mb-4 p-3 bg-[#F8F7FF] rounded-xl border border-[#E9E3FF]/50">
+                        <p className="text-sm font-bold text-[#1F2247] truncate">{confirmTaskTitle}</p>
+                      </div>
+                    )}
+                    <p className="text-sm text-[#A3AED0] font-medium mb-5">
+                      {confirmMode === "undo" ? t("dashboard.markIncomplete") : t("dashboard.markComplete")}
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={handleCancelComplete}
+                        disabled={isConfirming}
+                        className="flex-1 py-3 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-70 cursor-pointer"
+                      >
+                        {t("common.cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmComplete}
+                        disabled={isConfirming}
+                        className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
+                      >
+                        {isConfirming && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isConfirming ? t("dashboard.saving") : confirmMode === "undo" ? t("dashboard.yesUndo") : t("dashboard.yesComplete")}
+                      </button>
                     </div>
-                  )}
-                  <p className="text-sm text-[#A3AED0] font-medium mb-5">
-                    {confirmMode === "undo" ? t("dashboard.markIncomplete") : t("dashboard.markComplete")}
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={handleCancelComplete}
-                      disabled={isConfirming}
-                      className="flex-1 py-3 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-70 cursor-pointer"
-                    >
-                      {t("common.cancel")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleConfirmComplete}
-                      disabled={isConfirming}
-                      className="flex-1 py-3 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
-                    >
-                      {isConfirming && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {isConfirming ? t("dashboard.saving") : confirmMode === "undo" ? t("dashboard.yesUndo") : t("dashboard.yesComplete")}
-                    </button>
                   </div>
-                </div>
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
+                </motion.div>
+              </div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ── Observation Note Modal ────────────────────────────────────────────── */}
       {pendingObservationAlert && (
@@ -1563,74 +1576,77 @@ export function DashboardPage() {
       )}
 
       {/* ── Medication Alert Modal ────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {pendingAlert && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/65 backdrop-blur-md z-[9999]"
-            />
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 p-safe pointer-events-none">
+      {createPortal(
+        <AnimatePresence>
+          {pendingAlert && (
+            <>
               <motion.div
-                initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.88, y: 32 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.88, y: 32 }}
-                transition={{ type: "spring", stiffness: 320, damping: 26 }}
-                className="w-full max-w-md pointer-events-auto"
-              >
-                <div className="bg-white rounded-[28px] shadow-[0_40px_100px_rgba(0,0,0,0.30)] overflow-hidden border border-[#E9E3FF]/40">
-                  <div className="relative bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] px-6 sm:px-8 py-5 sm:py-6 flex items-center gap-4 overflow-hidden">
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
-                      animate={shouldReduceMotion ? {} : { x: ["-120%", "120%"] }}
-                      transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
-                    />
-                    <motion.div
-                      className="relative w-14 h-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0"
-                      animate={shouldReduceMotion ? {} : { scale: [1, 1.08, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                      <Bell className="w-7 h-7 text-white" />
-                    </motion.div>
-                    <div>
-                      <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-0.5">{t("dashboard.medicationAlert")}</p>
-                      <p className="text-xl font-bold text-white">{pendingAlert.title}</p>
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/65 backdrop-blur-md z-[9999]"
+              />
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 p-safe pointer-events-none">
+                <motion.div
+                  initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.88, y: 32 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.88, y: 32 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 26 }}
+                  className="w-full max-w-md pointer-events-auto"
+                >
+                  <div className="bg-white rounded-[28px] shadow-[0_40px_100px_rgba(0,0,0,0.30)] overflow-hidden border border-[#E9E3FF]/40">
+                    <div className="relative bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] px-6 sm:px-8 py-5 sm:py-6 flex items-center gap-4 overflow-hidden">
+                      <motion.div
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                        animate={shouldReduceMotion ? {} : { x: ["-120%", "120%"] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
+                      />
+                      <motion.div
+                        className="relative w-14 h-14 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0"
+                        animate={shouldReduceMotion ? {} : { scale: [1, 1.08, 1] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        <Bell className="w-7 h-7 text-white" />
+                      </motion.div>
+                      <div>
+                        <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-0.5">{t("dashboard.medicationAlert")}</p>
+                        <p className="text-xl font-bold text-white">{pendingAlert.title}</p>
+                      </div>
+                    </div>
+                    <div className="px-6 sm:px-8 py-5 sm:py-6">
+                      <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2">{t("dashboard.timeToAdminister")}</p>
+                      <div className="p-4 bg-[#F8F7FF] rounded-xl border border-[#E9E3FF]/50 mb-4">
+                        <p className="text-[#1F2247] font-bold text-base leading-relaxed">{pendingAlert.body}</p>
+                      </div>
+                      <p className="text-sm text-[#A3AED0] font-medium">{t("dashboard.confirmOrSnooze")}</p>
+                    </div>
+                    <div className="px-6 sm:px-8 pb-6 sm:pb-8 flex gap-3 sm:gap-4">
+                      <button
+                        type="button"
+                        onClick={handleAlertSnooze}
+                        disabled={isAlertConfirming}
+                        className="flex-1 py-4 px-6 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {t("dashboard.snooze")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAlertConfirm}
+                        disabled={isAlertConfirming}
+                        className="flex-1 py-4 px-6 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isAlertConfirming && <Loader2 className="w-5 h-5 animate-spin" />}
+                        {isAlertConfirming ? t("dashboard.confirming") : t("dashboard.confirm")}
+                      </button>
                     </div>
                   </div>
-                  <div className="px-6 sm:px-8 py-5 sm:py-6">
-                    <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-wider mb-2">{t("dashboard.timeToAdminister")}</p>
-                    <div className="p-4 bg-[#F8F7FF] rounded-xl border border-[#E9E3FF]/50 mb-4">
-                      <p className="text-[#1F2247] font-bold text-base leading-relaxed">{pendingAlert.body}</p>
-                    </div>
-                    <p className="text-sm text-[#A3AED0] font-medium">{t("dashboard.confirmOrSnooze")}</p>
-                  </div>
-                  <div className="px-6 sm:px-8 pb-6 sm:pb-8 flex gap-3 sm:gap-4">
-                    <button
-                      type="button"
-                      onClick={handleAlertSnooze}
-                      disabled={isAlertConfirming}
-                      className="flex-1 py-4 px-6 bg-[#F4F7FE] hover:bg-[#E9E3FF] text-[#4318FF] font-bold rounded-xl transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      {t("dashboard.snooze")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAlertConfirm}
-                      disabled={isAlertConfirming}
-                      className="flex-1 py-4 px-6 bg-gradient-to-r from-[#4318FF] to-[#8B5CF6] hover:from-[#3412C7] hover:to-[#7C3AED] text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                    >
-                      {isAlertConfirming && <Loader2 className="w-5 h-5 animate-spin" />}
-                      {isAlertConfirming ? t("dashboard.confirming") : t("dashboard.confirm")}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
+                </motion.div>
+              </div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
