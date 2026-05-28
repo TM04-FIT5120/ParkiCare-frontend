@@ -1739,7 +1739,7 @@ export function CareEventsPage() {
                   {showTestObsSelector && (
                     <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowTestObsSelector(false)} />
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#E0E5F2] min-w-[220px] overflow-hidden">
+                    <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-[#E0E5F2] min-w-[220px] max-w-[calc(100vw-1rem)] overflow-hidden">
                       {medsWithRemindId.length === 0 ? (
                         <p className="px-4 py-3 text-xs text-[#A3AED0]">
                           {t("careEvents.testObsNoteNoMeds")}

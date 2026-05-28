@@ -16,11 +16,7 @@ export interface ScanResult {
 export async function scanMedicineLabel(imageFile: File): Promise<ScanResult> {
   const formData = new FormData();
   formData.append("file", imageFile);
-  const response = await api.post<DrugOcrVO>(
-    "/ocr/drug",
-    formData,
-    { headers: { "Content-Type": "multipart/form-data" } },
-  );
+  const response = await api.post<DrugOcrVO>("/ocr/drug", formData);
   const { medicineName, capacity, manufacturer } = response.data;
   return {
     drugName: medicineName ?? "",
