@@ -28,6 +28,12 @@ export function setApiLanguage(lang: string) {
 
 api.interceptors.request.use((config) => {
   config.headers["Accept-Language"] = _currentLanguage;
+  // For FormData (file uploads), let the browser set Content-Type with the
+  // correct multipart boundary — the instance default of application/json
+  // would otherwise override it and break multipart parsing on the server.
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
   return config;
 });
 
