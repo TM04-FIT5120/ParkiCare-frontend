@@ -4,6 +4,7 @@ interface AuthUser {
   caregiverId: number;
   uniqueId: string;
   caregiverNickname: string;
+  language?: string;
 }
 
 interface PatientData {
@@ -17,6 +18,7 @@ interface AuthContextValue {
   patient: PatientData | null;
   login: (user: AuthUser) => void;
   setPatient: (patient: PatientData | null) => void;
+  updateUserLanguage: (language: string) => void;
   logout: () => void;
 }
 
@@ -52,6 +54,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPatientState(patientData);
   };
 
+  const updateUserLanguage = (language: string) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, language };
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
   const logout = () => {
     localStorage.removeItem(AUTH_USER_KEY);
     localStorage.removeItem(AUTH_PATIENT_KEY);
@@ -60,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, patient, login, setPatient, logout }}>
+    <AuthContext.Provider value={{ user, patient, login, setPatient, updateUserLanguage, logout }}>
       {children}
     </AuthContext.Provider>
   );

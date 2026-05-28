@@ -4,12 +4,14 @@ import { useAuth } from "@/context/AuthContext";
 import { motion } from "motion/react";
 import { User, Copy, CheckCircle2, ArrowRight, HeartPulse, LogOut } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Footer } from "@/components/layout/Footer";
 
 export function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, patient } = useAuth();
+  const { t } = useTranslation();
 
   const loginId = user?.uniqueId ?? location.state?.uniqueId ?? "-";
   const patientNickname = patient?.patientNickname ?? location.state?.patientNickname ?? "-";
@@ -21,7 +23,7 @@ export function ProfilePage() {
     try {
       await navigator.clipboard.writeText(String(loginId));
       setCopied(true);
-      toast.success("User ID copied to clipboard!");
+      toast.success(t("profile.copySuccess"));
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback for environments where clipboard API is blocked
@@ -36,12 +38,12 @@ export function ProfilePage() {
         textArea.select();
         document.execCommand('copy');
         textArea.remove();
-        
+
         setCopied(true);
-        toast.success("User ID copied to clipboard!");
+        toast.success(t("profile.copySuccess"));
         setTimeout(() => setCopied(false), 2000);
       } catch {
-        toast.error("Failed to copy ID.");
+        toast.error(t("profile.copyError"));
       }
     }
   };
@@ -51,7 +53,7 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans flex flex-col selection:bg-indigo-200 relative overflow-hidden">
+    <div className="min-h-screen-dvh w-full bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans flex flex-col selection:bg-indigo-200 relative pt-safe pb-safe">
       
       {/* Animated Light Blue Gradient Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -108,7 +110,7 @@ export function ProfilePage() {
           className="flex items-center gap-2 text-sm font-bold text-[#A3AED0] hover:text-[#2B3674] transition-colors bg-[#F4F7FE] px-4 py-2 rounded-full border-none hover:bg-[#E9E3FF]"
         >
           <LogOut className="w-4 h-4" />
-          Logout
+          {t("profile.logout")}
         </button>
       </motion.nav>
 
@@ -122,8 +124,8 @@ export function ProfilePage() {
         >
           <div className="px-4 sm:px-8 md:px-10 pb-6 sm:pb-10 relative bg-white">
             <div className="pt-6 sm:pt-10 mb-6 sm:mb-8">
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#2B3674] tracking-tight">Your Profile is Ready</h1>
-              <p className="text-[#A3AED0] mt-2 font-bold">Please save your User ID to log in next time.</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#2B3674] tracking-tight">{t("profile.title")}</h1>
+              <p className="text-[#A3AED0] mt-2 font-bold">{t("profile.subtitle")}</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -134,7 +136,7 @@ export function ProfilePage() {
                     <User className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-[#A3AED0] uppercase tracking-wider mb-2">Login User ID</h3>
+                <h3 className="text-sm font-bold text-[#A3AED0] uppercase tracking-wider mb-2">{t("profile.loginIdLabel")}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-3xl sm:text-4xl font-extrabold text-[#8B5CF6] tracking-tight drop-shadow-sm">{loginId}</span>
                 </div>
@@ -143,9 +145,9 @@ export function ProfilePage() {
                   className="mt-6 w-full py-3 bg-white text-[#8B5CF6] font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#F5F3FF] transition-all shadow-sm rounded-xl border-none"
                 >
                   {copied ? (
-                    <><CheckCircle2 className="w-4 h-4 text-[#8B5CF6]" /> Copied!</>
+                    <><CheckCircle2 className="w-4 h-4 text-[#8B5CF6]" /> {t("profile.copied")}</>
                   ) : (
-                    <><Copy className="w-4 h-4" /> Copy ID to Clipboard</>
+                    <><Copy className="w-4 h-4" /> {t("profile.copyId")}</>
                   )}
                 </button>
               </div>
@@ -157,16 +159,16 @@ export function ProfilePage() {
                     <HeartPulse className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-[#A3AED0] uppercase tracking-wider mb-2">Patient Config</h3>
-                
+                <h3 className="text-sm font-bold text-[#A3AED0] uppercase tracking-wider mb-2">{t("profile.patientConfig")}</h3>
+
                 <div className="space-y-4 mt-2 flex-1">
                   <div>
-                    <p className="text-xs font-bold text-[#A3AED0] mb-1">Nickname</p>
+                    <p className="text-xs font-bold text-[#A3AED0] mb-1">{t("profile.nicknameLabel")}</p>
                     <p className="font-extrabold text-[#2B3674] text-lg drop-shadow-sm">{patientNickname}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#A3AED0] mb-1">Age Range</p>
-                    <p className="font-extrabold text-[#2B3674] text-lg drop-shadow-sm">{ageRange} years</p>
+                    <p className="text-xs font-bold text-[#A3AED0] mb-1">{t("profile.ageRangeLabel")}</p>
+                    <p className="font-extrabold text-[#2B3674] text-lg drop-shadow-sm">{ageRange} {t("common.years")}</p>
                   </div>
                 </div>
               </div>
@@ -180,7 +182,7 @@ export function ProfilePage() {
             >
               <div className="absolute inset-0 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               <span className="relative z-10 flex items-center gap-2">
-                Go to Dashboard
+                {t("profile.goToDashboard")}
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
             </motion.button>

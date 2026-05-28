@@ -2,6 +2,7 @@ import { createContext } from "react";
 
 export type Medication = {
   id: number;
+  planId?: number;          // shared across all reminders from the same medication plan
   remindId?: number;        // backend ID from /reminder/plan
   drugId?: number;          // backend drug reference ID
   name: string;

@@ -12,6 +12,7 @@ export interface LoginResponse {
   nickname: string;
   uniqueId: string;
   message: string;
+  language: string;
 }
 
 export const authService = {
@@ -20,8 +21,8 @@ export const authService = {
     return res.data;
   },
 
-  login: async (uniqueId: string, password: string): Promise<LoginResponse> => {
-    const res = await api.post<LoginResponse>("/auth/login", { uniqueId, password });
+  login: async (nickname: string, password: string): Promise<LoginResponse> => {
+    const res = await api.post<LoginResponse>("/auth/login", { nickname, password });
     return res.data;
   },
 };

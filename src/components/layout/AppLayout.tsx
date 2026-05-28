@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import { User, Globe, ChevronDown, Check, Menu, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { Footer } from "@/components/layout/Footer";
+import { ScheduleOverlapAlertModal } from "@/components/ScheduleOverlapAlertModal";
+import { caregiverAlertsService, type CaregiverAlert } from "@/services/caregiverAlerts";
+
+// Module-level flag: persists across re-renders and re-mounts within the session.
+// Prevents the slide-in animation from replaying when language/auth context updates.
+let _navDidAnimate = false;
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -17,31 +25,42 @@ const ScrollToTop = () => {
 
 const LANGUAGES = [
   { id: "en", label: "English" },
-  { id: "zh", label: "中文" },
-  { id: "ms", label: "Bahasa Melayu" },
+  { id: "zh-CN", label: "中文" },
+  { id: "ms-MY", label: "Bahasa Melayu" },
 ];
 
 export const AppLayout = () => {
   const location = useLocation();
   const { user, patient } = useAuth();
-  const [currentLang, setCurrentLang] = useState(LANGUAGES[0]);
+  const { currentLang, setLanguage } = useLanguage();
+  const { t } = useTranslation();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [overlapAlerts, setOverlapAlerts] = useState<CaregiverAlert[]>([]);
 
   const caregiverId = user?.caregiverId ?? "-";
+
+  useEffect(() => {
+    const id = user?.caregiverId;
+    if (!id) return;
+    caregiverAlertsService.getUnread(id).then(setOverlapAlerts).catch(() => setOverlapAlerts([]));
+  }, [user?.caregiverId]);
   const caregiverNickname = user?.caregiverNickname ?? "Caregiver";
   const patientNickname = patient?.patientNickname ?? "Patient";
 
   const navLinks = [
-    { name: "Home", path: "/home" },
-    { name: "Guide", path: "/guide" },
-    { name: "Knowledge Hub", path: "/knowledge-hub" },
-    { name: "Care Events", path: "/care-events" },
-    // { name: "Digital Records", path: "/digital-records" },
+    { name: t("nav.home"), path: "/home" },
+    // { name: t("nav.guide"), path: "/guide" },
+    { name: t("nav.knowledgeHub"), path: "/knowledge-hub" },
+    { name: t("nav.careEvents"), path: "/care-events" },
+    { name: t("nav.digitalRecords"), path: "/digital-records" },
+    { name: t("nav.nutritionLibrary"), path: "/nutrition-library" },
+    { name: t("nav.recipes"), path: "/recipes" },
   ];
+  const currentLangLabel = LANGUAGES.find((l) => l.id === currentLang)?.label ?? "English";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans selection:bg-indigo-200 flex flex-col relative overflow-hidden">
+    <div className="min-h-screen-dvh bg-gradient-to-br from-[#EBF4FF] via-[#F4F7FE] to-[#E0EAFC] text-[#2B3674] font-sans selection:bg-indigo-200 flex flex-col relative">
       <ScrollToTop />
       {/* Background blobs - CSS-animated so the browser can schedule them on
           the compositor thread, not the JS main thread. Static on mobile to
@@ -56,21 +75,22 @@ export const AppLayout = () => {
       </div>
 
       {/* Top Navigation - Clean White, Soft Shadow */}
-      <motion.nav 
-        initial={{ y: -100 }}
+      <motion.nav
+        initial={_navDidAnimate ? false : { y: -100 }}
         animate={{ y: 0 }}
+        onAnimationComplete={() => { _navDidAnimate = true; }}
         transition={{ type: "spring" as const, stiffness: 200, damping: 20 }}
-        className="sticky top-0 z-50 px-4 sm:px-6 py-3 bg-white/95 sm:bg-white/90 sm:backdrop-blur-xl shadow-[0_4px_20px_rgba(112,144,176,0.08)] flex items-center justify-between"
+        className="sticky top-0 z-50 px-4 sm:px-6 pt-safe py-3 bg-white/95 sm:bg-white/90 sm:backdrop-blur-xl shadow-[0_4px_20px_rgba(112,144,176,0.08)] flex items-center justify-between gap-2"
       >
-        <div className="flex items-center gap-3 md:gap-6 lg:gap-8">
-          <Link to="/home" className="flex items-center gap-2 group shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-6 lg:gap-8 min-w-0 flex-1">
+          <Link to="/home" className="flex items-center gap-2 group shrink-0 min-w-0">
             <motion.img 
               whileHover={{ rotate: 10, scale: 1.05 }}
               src="/logo-nav.png"
               alt="ParkiCare Logo"
-              className="w-12 h-12 object-contain drop-shadow-sm" 
+              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-sm shrink-0" 
             />
-            <span className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-[#2B3674] to-indigo-600 tracking-tight">
+            <span className="hidden min-[400px]:inline text-lg sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-[#2B3674] to-indigo-600 tracking-tight truncate">
               ParkiCare
             </span>
           </Link>
@@ -102,22 +122,22 @@ export const AppLayout = () => {
         
         <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
           {/* Language Switcher instead of Bell */}
-          <DropdownMenu.Root>
+          <DropdownMenu.Root modal={false}>
             <DropdownMenu.Trigger className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#F4F7FE] hover:bg-[#E9E3FF] rounded-full text-xs font-bold text-[#4318FF] transition-colors focus:outline-none">
               <Globe className="w-3.5 h-3.5 text-[#4318FF]" />
-              {currentLang.label}
+              {currentLangLabel}
               <ChevronDown className="w-3 h-3 text-[#4318FF]/70" />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="min-w-[140px] bg-white rounded-xl shadow-[0_18px_40px_rgba(112,144,176,0.12)] border-none p-2 z-50 animate-in fade-in zoom-in-95 duration-200" align="end" sideOffset={8}>
                 {LANGUAGES.map(lang => (
-                  <DropdownMenu.Item 
+                  <DropdownMenu.Item
                     key={lang.id}
-                    onClick={() => setCurrentLang(lang)}
+                    onClick={() => setLanguage(lang.id)}
                     className="flex items-center justify-between px-3 py-2 text-sm font-bold text-[#A3AED0] rounded-lg cursor-pointer outline-none hover:bg-[#F4F7FE] hover:text-[#4318FF] transition-colors"
                   >
                     {lang.label}
-                    {currentLang.id === lang.id && <Check className="w-4 h-4 text-[#4318FF]" />}
+                    {currentLang === lang.id && <Check className="w-4 h-4 text-[#4318FF]" />}
                   </DropdownMenu.Item>
                 ))}
               </DropdownMenu.Content>
@@ -141,7 +161,8 @@ export const AppLayout = () => {
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-[#4318FF] hover:bg-[#F4F7FE] rounded-lg transition-colors"
+            className="md:hidden min-w-11 min-h-11 flex items-center justify-center text-[#4318FF] hover:bg-[#F4F7FE] rounded-lg transition-colors"
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -195,23 +216,23 @@ export const AppLayout = () => {
 
               {/* Language Switcher in Mobile */}
               <div className="pt-2 border-t border-[#E0E5F2]">
-                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 px-4">Language</p>
+                <p className="text-xs font-bold text-[#A3AED0] uppercase tracking-widest mb-2 px-4">{t("nav.language")}</p>
                 <div className="space-y-1">
                   {LANGUAGES.map(lang => (
                     <button
                       key={lang.id}
                       onClick={() => {
-                        setCurrentLang(lang);
+                        setLanguage(lang.id);
                         setMobileMenuOpen(false);
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-bold transition-colors ${
-                        currentLang.id === lang.id
+                        currentLang === lang.id
                           ? 'bg-[#E9E3FF] text-[#4318FF]'
                           : 'text-[#A3AED0] hover:bg-[#F4F7FE] hover:text-[#2B3674]'
                       }`}
                     >
                       {lang.label}
-                      {currentLang.id === lang.id && <Check className="w-4 h-4" />}
+                      {currentLang === lang.id && <Check className="w-4 h-4" />}
                     </button>
                   ))}
                 </div>
@@ -230,12 +251,20 @@ export const AppLayout = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6 md:p-7 xl:p-8"
+            className="flex-1 w-full max-w-[1400px] mx-auto p-4 sm:p-6 md:p-7 xl:p-8 min-w-0"
           >
             <Outlet />
           </motion.main>
         </AnimatePresence>
       </div>
+
+      {typeof user?.caregiverId === "number" && overlapAlerts.length > 0 && (
+        <ScheduleOverlapAlertModal
+          caregiverId={user.caregiverId}
+          alerts={overlapAlerts}
+          onDismissed={() => setOverlapAlerts([])}
+        />
+      )}
 
       <Footer />
     </div>
