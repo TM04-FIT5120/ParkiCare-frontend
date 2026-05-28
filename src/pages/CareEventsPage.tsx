@@ -12,6 +12,7 @@ import { drugsService, type DrugBase } from "@/services/drugs";
 import { careEventsService } from "@/services/careEvents";
 import { caregiverScheduleService } from "@/services/caregiverSchedule";
 import { scanMedicineLabel } from "@/services/ocr";
+import { compressImageForOcr, resolveWizardImageError } from "@/lib/compressImageForOcr";
 // import { HistorySection } from "@/components/HistorySection";
 // import type { CareEvent } from "@/context/careEventsContext";
 import { getMYTDateString, isEventOnDay } from "@/lib/eventRecurrence";
@@ -827,15 +828,23 @@ export function CareEventsPage() {
     setSelectedMeals([]);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.files?.[0];
+    e.target.value = "";
+    if (!raw) return;
     if (medicationImagePreview) URL.revokeObjectURL(medicationImagePreview);
-    setMedicationImage(file);
-    setMedicationImagePreview(URL.createObjectURL(file));
     setOcrResult(null);
     setIsOcrLoading(false);
     setDosageMismatchAcked(false);
+    try {
+      const file = await compressImageForOcr(raw);
+      setMedicationImage(file);
+      setMedicationImagePreview(URL.createObjectURL(file));
+    } catch (err) {
+      setMedicationImage(null);
+      setMedicationImagePreview(null);
+      toast.error(resolveWizardImageError(err, t));
+    }
   };
 
   const resetMedicationForm = () => {
@@ -1076,12 +1085,15 @@ export function CareEventsPage() {
           setIsOcrLoading(true);
           setDosageMismatchAcked(false);
           try {
-            const result = await scanMedicineLabel(medicationImage);
+            const file = await compressImageForOcr(medicationImage);
+            if (file !== medicationImage) setMedicationImage(file);
+            const result = await scanMedicineLabel(file);
             setOcrResult({ name: result.drugName, dose: result.dosage, quantity: 0, manufacturer: result.manufacturer });
             if (result.drugName) setMedName(result.drugName);
             if (result.dosage) setDose(result.dosage);
             if (result.manufacturer) { manufacturerJustSelected.current = true; setManufacturerName(result.manufacturer); }
-          } catch {
+          } catch (err) {
+            toast.error(resolveWizardImageError(err, t));
             setOcrResult({ name: "", dose: "", quantity: 0, manufacturer: "", error: true });
           } finally {
             setIsOcrLoading(false);
