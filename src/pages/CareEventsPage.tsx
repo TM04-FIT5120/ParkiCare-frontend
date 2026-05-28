@@ -331,7 +331,7 @@ export function CareEventsPage() {
 
     try {
       const compressed = await imageCompression(file, {
-        maxSizeMB: 0.2,
+        maxSizeMB: 0.1,
         maxWidthOrHeight: 1200,
         fileType: "image/jpeg",
         initialQuality: 0.7,
