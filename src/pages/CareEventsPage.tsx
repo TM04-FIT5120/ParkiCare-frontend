@@ -331,10 +331,10 @@ export function CareEventsPage() {
 
     try {
       const compressed = await imageCompression(file, {
-        maxSizeMB: 0.1,
-        maxWidthOrHeight: 1300,
+        maxSizeMB: 0.05,
+        maxWidthOrHeight: 1000,
         fileType: "image/jpeg",
-        initialQuality: 0.75,
+        initialQuality: 0.55,
         useWebWorker: true,
       });
       setMedicationImage(compressed);
